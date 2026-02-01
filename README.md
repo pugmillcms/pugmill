@@ -12,7 +12,7 @@ Unlike some solutions **ReplPress** is built for the 2026 developer ecosystem:
 
 ---
 
-## 🏗️ The Stack
+## The Stack
 - **Framework:** [Next.js 15+](https://nextjs.org/)
 - **Database:** [Replit PostgreSQL](https://replit.com/usage/postgresql)
 - **ORM:** [Drizzle ORM](https://orm.drizzle.team/)
@@ -21,7 +21,7 @@ Unlike some solutions **ReplPress** is built for the 2026 developer ecosystem:
 
 ---
 
-## 🛠️ Project Structure
+## Project Structure
 ReplPress follows a strict modular architecture to ensure "rebuildability":
 - `/src/app`: Core application routes and Admin Dashboard.
 - `/src/lib`: Core utilities (Database, Hook System, Auth).
@@ -31,7 +31,7 @@ ReplPress follows a strict modular architecture to ensure "rebuildability":
 
 ---
 
-## 🚀 Getting Started (for Replit Agent)
+## Getting Started (for Replit Agent)
 To begin building ReplPress, follow these steps:
 1. **Initialize:** "Read `AGENT.md` and `GUIDE.md` to understand the architecture."
 2. **Setup:** "Install dependencies and push the Drizzle schema to PostgreSQL."
@@ -39,15 +39,15 @@ To begin building ReplPress, follow these steps:
 
 ---
 
-## 🔌 Developing Plugins
+## Developing Plugins
 Every plugin lives in its own folder within `/plugins` and must contain:
 1. `manifest.json`: Metadata for the Admin UI.
 2. `index.ts`: Logic that registers with the `HookManager`.
 
-## 🎨 Creating Themes
+## Creating Themes
 Themes are found in `/themes`. A theme consists of a `Layout.tsx` and specific "Views" (Home, Post, Page) that the core app dynamically imports.
 
 ---
 
-## ⚖️ License
+## License
 Open Source under the MIT License. Built for the Replit Community.
