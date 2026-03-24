@@ -41,6 +41,12 @@ const nextConfig: NextConfig = {
   // Hide the Next.js dev-mode indicator (the ▲/N badge that appears in the corner)
   devIndicators: false,
 
+  // Allow proxied preview domains (Replit, Railway, Render, etc.) to load dev assets
+  // without cross-origin warnings. No-op when the env var is absent.
+  ...(process.env.REPLIT_DEV_DOMAIN
+    ? { allowedDevOrigins: [process.env.REPLIT_DEV_DOMAIN] }
+    : {}),
+
   images: {
     remotePatterns,
   },
