@@ -124,7 +124,23 @@ await getStorage().delete(storageKey);
 
 **Adding a new storage backend** — implement `StorageProvider` from `src/lib/storage/types.ts`, then add a branch in `src/lib/storage/index.ts`.
 
-#### 8. Configuration System
+#### 8. AI Integration
+
+AI capabilities are additive — every feature works fully without a provider. Set `config.ai.provider` in Admin → Settings → AI to unlock generation tools.
+
+**Rate limiter:** All AI API routes call `checkAndIncrementAi(userId)` from `src/lib/rate-limit.ts` before hitting the provider. This atomically increments a counter in the `ai_usage` DB table (one row per user, 1-hour window). Returns `{ allowed, count, limit }`. If `allowed` is false, return 429. The `ai_usage` table is created by `npm run db:push` on fresh installs or `npm run db:migrate` (migrate-003) on existing ones.
+
+**AI API routes:**
+- `POST /api/ai/suggest` — all suggestion tools. `type` field selects the tool. Special-case handlers for `site-summary`, `site-faqs`, `internal-links`, and `social-post` run before the generic path.
+- `POST /api/ai/refine` — write and refine content. `mode: "write"` generates from prompt; `mode: "refine"` (default) edits existing content.
+
+Both routes return `{ result, usage }` on success and `{ error, usage }` on all failures including 429, so the client meter stays current.
+
+**`btn-processing` CSS class:** Defined in `src/app/globals.css`. A barber-pole stripe animation used on AI action buttons while running. Apply with `className={pending ? "btn-processing" : "bg-zinc-900 ..."}`.
+
+**Social post generator:** `type=social-post` in `/api/ai/suggest`. Accepts `platform` (LinkedIn/X/Facebook/Substack) and `aeoMeta` (AEO metadata object). Uses AEO as primary input when present; falls back to `content`. Character limits enforced client-side in `PostForm.tsx` via `SOCIAL_PLATFORMS` constant.
+
+#### 9. Configuration System
 CMS configuration is stored in the `site_config` PostgreSQL table (a single row, `id=1`) managed via Drizzle ORM.
 
 - **`getConfig()`** — async, always `await` it. Reads from DB with in-memory cache. On first boot, seeds from `pugmill.config.json` if present, otherwise uses built-in defaults.
@@ -137,7 +153,7 @@ CMS configuration is stored in the `site_config` PostgreSQL table (a single row,
 
 ### **Agent Workflow Instructions**
 1. **Apply the scope filter first.** Before writing any code, ask: does this need to run continuously? Does it require deep CMS integration? Will many users need it? If no — write a one-off script, not a plugin or core feature. See `PHILOSOPHY.md` for the full decision framework.
-2. **Database Changes:** Always update the schema in `/src/lib/db/schema.ts` first. Fresh installs: `npm run db:push`. Existing deployments: write a migration script in `/scripts/` and run `npm run db:migrate`.
+2. **Database Changes:** Always update the schema in `/src/lib/db/schema.ts` first. Fresh installs: `npm run db:push`. Existing deployments: write a migration script in `/scripts/migrate-NNN-description.ts` (use `IF NOT EXISTS` / `IF EXISTS` guards so it's safe to re-run), then add it to the `db:migrate` command chain in `package.json`.
 3. **Creating Plugins:** When asked to "add a feature," run the scope filter. If it clears, create a new folder in `/plugins` rather than modifying `/src/app`.
 4. **Creating Themes:** Copy `/themes/_template/` as your starting point. Read `THEMES.md` before writing any theme code. Register the new theme in `src/lib/theme-registry.ts`.
 5. **UI Consistency:** Always use Tailwind CSS classes. Match the admin UI patterns already established in `src/app/admin/`.

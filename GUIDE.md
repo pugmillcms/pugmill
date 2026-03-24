@@ -58,6 +58,21 @@ This guide contains the build sequence and agent prompts for constructing Pugmil
 
 ---
 
+## Sprint 7: AI Tools & Rate Limiter
+**Goal:** Add per-user AI rate limiting and the full suite of AI writing/analysis tools in the post editor.
+
+> "Add the `ai_usage` table to `src/lib/db/schema.ts` (columns: `user_id` TEXT PK, `window_start` TIMESTAMP, `count` INTEGER). In `src/lib/rate-limit.ts`, add `checkAndIncrementAi(userId)` (atomic SQL upsert — resets window if expired, increments otherwise; returns `{ allowed, count, limit }`) and `getAiUsage(userId)` (read-only). Limit is 50 calls per hour (`AI_RATE_LIMIT = 50`, `AI_RATE_WINDOW = 3600000`).
+>
+> In `src/app/api/ai/suggest/route.ts` and `src/app/api/ai/refine/route.ts`: call `checkAndIncrementAi` after auth, return 429 with `{ error, usage }` if blocked. Include `usage` in every success and error response so the client meter stays current.
+>
+> Add `btn-processing` barber-pole CSS animation to `src/app/globals.css`. In `PostForm.tsx` add: AI usage meter card (green/amber/orange/red tiers), Refine Focus tool (`type=refine-focus` — returns JSON array of focus issues shown below the Topic Focus card when score < 5), Suggest Titles button in the Topic Focus card (score < 5), and the Social Post Generator card (LinkedIn/X/Facebook/Substack platform buttons, barber pole bar, editable textarea, character counter that turns red when over the platform limit, copy button). Use `SOCIAL_PLATFORMS` constant for platform IDs and limits. The social post API call passes `aeoMeta` state so AEO metadata is the primary input.
+>
+> Add `calcAeoScore()` to `src/lib/aeo.ts` (0–3 score from summary/Q&A/entities) and use it in the posts/pages list (`/admin/posts`) to replace the Slug column with a 3-dot AEO indicator.
+>
+> Write a migration script `scripts/migrate-003-ai-usage.ts` and add it to the `db:migrate` chain in `package.json`."
+
+---
+
 ## Troubleshooting & Rebuilding
 
 - **DB schema mismatch (fresh install):** Run `npm run db:push`

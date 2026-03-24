@@ -37,7 +37,7 @@ Read [`PHILOSOPHY.md`](./PHILOSOPHY.md) before building on or extending Pugmill 
 | **Theme System** | Full design token system with draft/publish workflow. Colors, fonts, and layout controls editable in Admin → Design without touching code |
 | **Storage Abstraction** | `LocalStorageProvider` (default) or `S3StorageProvider` (AWS S3, R2, DO Spaces, MinIO) |
 | **SEO & Discovery** | `generateMetadata()`, `sitemap.ts`, `/feed.xml` (RSS 2.0), Open Graph, Twitter Cards |
-| **Built-in vs Enhanced** | Every feature works without AI. Connect an AI provider and the same features gain generation, suggestion, and automation — AEO auto-draft, content refine, alt text, and more |
+| **Built-in vs Enhanced** | Every feature works without AI. Connect an AI provider (Admin → Settings → AI) and the same features gain generation, suggestion, and automation — AEO auto-draft, content refine, tone check, topic focus, social post generator, and more. Per-user hourly rate limit (50 calls/hr) enforced server-side with a colour-coded usage meter in the editor |
 | **Content Revisions** | Every post save creates a revision snapshot; restore any previous version from the edit page |
 | **Lean Core** | Small enough for an agent to understand completely in one context window; opinionated enough that the right path is obvious |
 
@@ -103,7 +103,9 @@ Optional variables (OAuth, S3, etc.) are documented in [REQUIREMENTS.md](./REQUI
 ### 3. Push the database schema
 
 ```bash
-npm run db:push
+npm run db:push        # fresh install — creates all tables
+# OR for existing deployments:
+npm run db:migrate     # incremental migrations (safe to re-run)
 ```
 
 ### 4. Seed the admin user
@@ -200,12 +202,13 @@ Every post/page can carry structured AEO metadata (stored as JSONB):
 ```json
 {
   "summary": "One-paragraph plain-English summary for LLMs",
-  "qa": [
-    { "question": "What is Pugmill?", "answer": "A headless CMS…" }
+  "questions": [
+    { "q": "What is Pugmill?", "a": "A headless CMS…" }
   ],
   "entities": [
-    { "name": "Next.js", "type": "technology" }
-  ]
+    { "type": "SoftwareApplication", "name": "Next.js", "description": "React framework" }
+  ],
+  "keywords": ["cms", "next.js", "ai-native"]
 }
 ```
 
@@ -366,8 +369,8 @@ See [`THEMES.md`](./THEMES.md) for the full contract and [`/themes/_template/`](
 | `npm run build` | Production build |
 | `npm run start` | Start production server |
 | `npm run setup` | Seed admin user (first run) |
-| `npm run db:push` | Push Drizzle schema to database (fresh installs) |
-| `npm run db:migrate` | Run migration scripts (existing installs after schema updates) |
+| `npm run db:push` | Push Drizzle schema to database (fresh installs — creates all tables) |
+| `npm run db:migrate` | Run incremental migration scripts in order (existing installs after schema updates; safe to re-run) |
 | `npm run db:studio` | Open Drizzle Studio (visual DB browser) |
 | `npm run env:check` | Validate required environment variables |
 

@@ -65,7 +65,8 @@ Pugmill is an AI-native, semi-headless content management system built on Next.j
 ### 3.4 Rate limiting
 - Login: 5 attempts per email per 15 minutes.
 - Login: 20 attempts per IP per 15 minutes.
-- Implemented via in-memory LRU cache (`src/lib/rate-limit.ts`).
+- Login limiters implemented via in-memory LRU cache (`src/lib/rate-limit.ts`).
+- **AI calls:** 50 per user per hour. Enforced server-side via the `ai_usage` DB table (`checkAndIncrementAi()`). Counter resets after 1 hour. Warning tiers in the editor UI: green (0–19), amber (20–29), orange (30–39), red (40–49), blocked at 50.
 
 ---
 
@@ -151,7 +152,7 @@ Active items and their parent sections are visually highlighted. Sub-items are i
 - Combined view of all posts and pages in a single table.
 - **Filter controls:** Type (All / Posts / Pages), Status (All / Published / Scheduled / Draft) — pill toggles, URL-param driven.
 - **Sortable columns:** Title (A–Z / Z–A), Date (newest / oldest). Arrow indicators show active sort direction.
-- **Columns:** Title, Type badge (blue = Post, purple = Page), Slug, Status badge, Date, Actions (Edit, View, Delete).
+- **Columns:** Title, Type badge (blue = Post, purple = Page), AEO score (3-dot indicator: summary · Q&A · entities), Status badge, Date, Actions (Edit, View, Delete).
 - Empty filtered state: "No results. Try adjusting the filters."
 
 **New / Edit form (`/admin/posts/new`, `/admin/posts/[id]/edit`):**
@@ -226,11 +227,20 @@ Each post/page carries an optional `aeoMetadata` JSONB column with the following
   ],
   "entities": [
     { "type": "Organization", "name": "Pugmill", "description": "Open-source CMS" }
-  ]
+  ],
+  "keywords": ["cms", "next.js", "ai-native"]
 }
 ```
 
-Entity types: `Thing`, `Person`, `Organization`, `Product`, `Place`, `Event`, `Technology`.
+Field notes:
+- `summary` — max 1000 characters.
+- `questions` — array of `{ q, a }` pairs. Both fields required for a pair to count toward AEO score.
+- `entities` — named entities explicitly discussed in the post. `description` is optional.
+- `keywords` — up to 30 strings, max 100 chars each. Used by AI social post generator and keyword extraction tool.
+
+Entity types: `Thing`, `Person`, `Organization`, `Product`, `Place`, `Event`, `SoftwareApplication`, `CreativeWork`.
+
+**AEO completeness score (0–3):** Shown as a 3-dot indicator on the posts list and in the editor. One point each for: summary filled, at least one Q&A pair, at least one entity. Computed by `calcAeoScore()` in `src/lib/aeo.ts`.
 
 ### 6.2 llms.txt endpoints
 
@@ -593,21 +603,91 @@ Same npm + private registry model as plugins (see §12.5). Themes ship two forma
 
 ---
 
-## 16. First-Run Setup
+## 16. AI Integration Requirements
+
+Pugmill follows the built-in vs enhanced pattern: every feature works fully without an AI provider. Connecting one in Admin → Settings → AI adds generation, suggestions, and automation additively.
+
+### 16.1 AI provider configuration
+
+AI provider credentials are stored encrypted in the `site_config` DB table (`config.ai`). The encryption key is `AI_ENCRYPTION_KEY` (AES-256-GCM). If unset, the key is stored as plaintext with a server-side warning.
+
+Supported providers: OpenAI (`gpt-4o`, `gpt-4o-mini`), Anthropic (`claude-*`). Configured via Admin → Settings → AI.
+
+### 16.2 AI rate limiter
+
+- **Limit:** 50 AI API calls per user per hour.
+- **Storage:** `ai_usage` table — one row per user (`user_id` PK, `window_start` timestamp, `count` integer). Window resets after 1 hour; the counter is atomically incremented with a raw SQL upsert that resets when the window expires.
+- **Enforcement:** `checkAndIncrementAi(userId)` in `src/lib/rate-limit.ts` — called server-side at the top of every AI API route before the provider call. Returns `{ allowed, count, limit }`.
+- **Read-only check:** `getAiUsage(userId)` — returns current count without incrementing.
+- **Client meter:** PostForm shows a colour-coded usage bar (green 0–19, amber 20–29, orange 30–39, red 40–49, blocked at 50). Updated from `usage` field returned in every AI response body.
+
+### 16.3 AI tools in the post editor
+
+All tools call `/api/ai/suggest` or `/api/ai/refine`. Both routes enforce the rate limiter and return `{ result, usage }` on success or `{ error, usage }` on failure (including 429 for rate limit exceeded).
+
+| Tool | Route | Description |
+|---|---|---|
+| Generate All AEO Metadata | `/api/ai/suggest` | Fills excerpt, slug, categories, tags, AEO, and keywords in one shot |
+| Suggest Titles | `/api/ai/suggest?type=titles` | 5 alternative titles |
+| Generate Excerpt | `/api/ai/suggest?type=excerpt` | 1–2 sentence excerpt |
+| Generate Slug | `/api/ai/suggest?type=slug` | SEO-friendly URL slug from title |
+| Generate AEO | `/api/ai/suggest?type=aeo` | Summary, Q&A pairs, entities |
+| Extract Keywords | `/api/ai/suggest?type=keywords` | 5–15 SEO keywords |
+| Suggest Categories | `/api/ai/suggest?type=categories` | 1–3 category suggestions |
+| Suggest Tags | `/api/ai/suggest?type=tags` | 3–7 tag suggestions (prefers existing tags) |
+| Write | `/api/ai/refine` (mode=write) | Full draft from prompt/outline |
+| Refine | `/api/ai/refine` (mode=refine) | Editor pass on existing content |
+| Tone Check | `/api/ai/suggest?type=tone-check` | Passages deviating from author voice guide |
+| Topic Focus Report | `/api/ai/suggest?type=topic-report` | Focus score 1–5, note |
+| Refine Focus | `/api/ai/suggest?type=refine-focus` | Up to 4 focus issues with quotes and recommendations; shown when topic score < 5 |
+| Reading Level | `/api/ai/suggest?type=reading-level` | Grade level + voice fit |
+| Meta Title Variants | `/api/ai/suggest?type=meta-title` | 3 SEO meta title options |
+| Headline Variants | `/api/ai/suggest?type=headline-variants` | Curiosity + utility headline pair |
+| Internal Links | `/api/ai/suggest?type=internal-links` | 3–5 internal link opportunities |
+| Content Brief | `/api/ai/suggest?type=brief` | Full content brief with outline, angle, audience |
+| Social Post | `/api/ai/suggest?type=social-post` | Platform-specific post draft (LinkedIn/X/Facebook/Substack); uses AEO metadata as primary input |
+| Site Summary | `/api/ai/suggest?type=site-summary` | AEO site summary for llms.txt |
+| Site FAQs | `/api/ai/suggest?type=site-faqs` | 4–6 site-level FAQ pairs for llms.txt |
+
+### 16.4 Social post generator
+
+Platform buttons appear in the editor's AI Analysis section. Clicking a platform fires immediately, replaces any previous draft for that platform. Each platform has a character limit enforced client-side (counter turns red when over):
+
+| Platform | Limit |
+|---|---|
+| LinkedIn | 3000 |
+| X | 280 |
+| Facebook | 500 |
+| Substack | 800 |
+
+The API route uses AEO metadata (summary, Q&A, keywords) as primary input when available, falling back to raw content. This produces smarter drafts when "Generate All AEO Metadata" has been run.
+
+### 16.5 Author voice
+
+Each admin user has an `authorVoice` text field (Admin → My Profile). This free-text style guide is injected into the system prompt for tone-sensitive tools (Write, Refine, Tone Check, Reading Level, Social Post).
+
+---
+
+## 17. First-Run Setup
 
 ```bash
 cp .env.example .env.local      # fill in DATABASE_URL and NEXTAUTH_SECRET at minimum
 npm install
-npx drizzle-kit push            # create all database tables
+npm run db:push                 # create all database tables (fresh install)
 npm run setup                   # create the first admin account + seed config
 npm run dev                     # start development server at http://localhost:3000
+```
+
+For **existing deployments** after pulling new changes:
+```bash
+npm run db:migrate              # run incremental migration scripts (safe to re-run)
 ```
 
 Visit `/admin/login` to sign in.
 
 ---
 
-## 17. Known Limitations (v0.1)
+## 18. Known Limitations (v0.1)
 
 | # | Limitation | Planned resolution |
 |---|---|---|
@@ -620,4 +700,4 @@ Visit `/admin/login` to sign in.
 | L7 | No post draft preview (design draft preview is implemented; post-level preview is not) | Deferred to v0.2 |
 | L8 | No bulk post operations | Deferred to v0.2 |
 | L9 | No Content Security Policy header | Complex due to Tailwind inline styles; v0.2 |
-| L10 | No test suite | Integration tests planned for v0.2 |
+| L10 | AI rate limiter uses `TIMESTAMP WITHOUT TIME ZONE` — comparisons assume consistent server timezone | Use `TIMESTAMPTZ` in v0.2 |
