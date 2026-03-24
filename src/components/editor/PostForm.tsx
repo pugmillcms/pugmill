@@ -108,18 +108,12 @@ function AeoBadge({ aeo }: { aeo: AeoMetadata }) {
 
 const ACTION_LABELS: Record<string, string> = {
   "internal-links": "Internal Link Suggestions",
-  "meta-title": "Meta Title Variants",
-  "headline-variants": "Headline Variants",
   "topic-report": "Topic Focus Report",
-  "reading-level": "Reading Level",
 };
 
 const ACTION_INSTRUCTIONS: Record<string, string> = {
   "internal-links": "Paste each link into your content where the anchor text fits naturally. Internal links improve SEO and keep readers engaged longer.",
-  "meta-title": "Copy your preferred variant and paste it into the post title field above, or use it as the browser tab title via your SEO settings. Aim for under 60 characters.",
-  "headline-variants": "Use one of these as your H1 or article title to improve click-through rates. The curiosity variant works well for social; the utility variant performs better in search.",
   "topic-report": "A low score means your content is too broad or unfocused. Narrow the angle, add more depth on the main topic, or break it into multiple posts.",
-  "reading-level": "Most blog content targets grade 7–9. Adjust your sentence length and vocabulary to match your audience. Use shorter sentences and active voice to simplify.",
 };
 
 const SOCIAL_PLATFORMS: { id: string; label: string; limit: number }[] = [
@@ -401,7 +395,7 @@ export default function PostForm({
 
   const RUN_ALL_TOOLS = [
     "excerpt", "categories", "tags", "aeo",
-    "internal-links", "meta-title", "headline-variants", "topic-report", "reading-level",
+    "internal-links", "topic-report",
   ] as const;
 
   async function handleRunAll() {
@@ -512,54 +506,6 @@ export default function PostForm({
               })}
             </ul>
           );
-      } else if (action === "meta-title") {
-        const variants = parseJson<{ title: string; reasoning: string }[]>(result);
-        content = (
-          <ul className="divide-y divide-zinc-100">
-            {variants.map((v, i) => {
-              const applyKey = `meta-apply-${i}`;
-              const copyKey = `meta-copy-${i}`;
-              return (
-                <li key={i} className="py-3 space-y-1">
-                  <p className="text-sm font-medium text-zinc-800">{v.title}</p>
-                  <p className="text-xs text-zinc-400">{v.reasoning}</p>
-                  <div className="flex items-center gap-3 pt-0.5">
-                    <button type="button" onClick={() => applyTitle(v.title, applyKey)} className="text-xs text-zinc-700 hover:text-zinc-900 font-medium underline">
-                      {appliedKey === applyKey ? "Applied ✓" : "Use as title"}
-                    </button>
-                    <button type="button" onClick={() => handleCopy(v.title, copyKey)} className="text-xs text-zinc-400 hover:text-zinc-600">
-                      {copiedKey === copyKey ? "Copied!" : "Copy"}
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        );
-      } else if (action === "headline-variants") {
-        const variants = parseJson<{ curiosity: string; utility: string }>(result);
-        content = (
-          <div className="divide-y divide-zinc-100">
-            {(["curiosity", "utility"] as const).map(k => {
-              const applyKey = `headline-apply-${k}`;
-              const copyKey = `headline-copy-${k}`;
-              return (
-                <div key={k} className="py-3 space-y-1">
-                  <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">{k}</p>
-                  <p className="text-sm text-zinc-800">{variants[k]}</p>
-                  <div className="flex items-center gap-3 pt-0.5">
-                    <button type="button" onClick={() => applyTitle(variants[k], applyKey)} className="text-xs text-zinc-700 hover:text-zinc-900 font-medium underline">
-                      {appliedKey === applyKey ? "Applied ✓" : "Use as title"}
-                    </button>
-                    <button type="button" onClick={() => handleCopy(variants[k], copyKey)} className="text-xs text-zinc-400 hover:text-zinc-600">
-                      {copiedKey === copyKey ? "Copied!" : "Copy"}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        );
       } else if (action === "topic-report") {
         const report = parseJson<{ topic: string; score: number; note: string }>(result);
         content = (
@@ -596,19 +542,6 @@ export default function PostForm({
                 </button>
               </div>
             )}
-          </div>
-        );
-      } else if (action === "reading-level") {
-        const rl = parseJson<{ level: string; gradeLevel: number; note: string; fit?: string }>(result);
-        const fitColor = rl.fit === "fits voice" ? "bg-green-100 text-green-700"
-          : rl.fit === "too complex" ? "bg-red-100 text-red-700"
-          : rl.fit === "too simple" ? "bg-yellow-100 text-yellow-700" : "";
-        content = (
-          <div className="space-y-3">
-            <span className="text-sm font-semibold text-zinc-800">{rl.level}</span>
-            <p className="text-sm text-zinc-600">Grade {rl.gradeLevel} equivalent</p>
-            <p className="text-sm text-zinc-600">{rl.note}</p>
-            {rl.fit && <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${fitColor}`}>{rl.fit}</span>}
           </div>
         );
       } else {
@@ -1115,26 +1048,6 @@ export default function PostForm({
               </div>
             </div>
 
-            {/* Meta Titles */}
-            <div className="bg-white border border-zinc-200 rounded-lg p-6">
-              <div className="flex items-center justify-between mb-1.5">
-                <SectionLabel>Meta Titles</SectionLabel>
-                <RunBtn tool="meta-title" label="Run" />
-              </div>
-              <p className="text-xs text-zinc-600 mb-3">{ACTION_INSTRUCTIONS["meta-title"]}</p>
-              {moreAiResults["meta-title"] && renderToolResult("meta-title", moreAiResults["meta-title"])}
-            </div>
-
-            {/* Headline Variants */}
-            <div className="bg-white border border-zinc-200 rounded-lg p-6">
-              <div className="flex items-center justify-between mb-1.5">
-                <SectionLabel>Headline Variants</SectionLabel>
-                <RunBtn tool="headline-variants" label="Run" />
-              </div>
-              <p className="text-xs text-zinc-600 mb-3">{ACTION_INSTRUCTIONS["headline-variants"]}</p>
-              {moreAiResults["headline-variants"] && renderToolResult("headline-variants", moreAiResults["headline-variants"])}
-            </div>
-
             {/* Topic Focus */}
             <div className="bg-white border border-zinc-200 rounded-lg p-6">
               <div className="flex items-center justify-between mb-1.5">
@@ -1162,16 +1075,6 @@ export default function PostForm({
                   </button>
                 </div>
               )}
-            </div>
-
-            {/* Reading Level */}
-            <div className="bg-white border border-zinc-200 rounded-lg p-6">
-              <div className="flex items-center justify-between mb-1.5">
-                <SectionLabel>Reading Level</SectionLabel>
-                <RunBtn tool="reading-level" label="Run" />
-              </div>
-              <p className="text-xs text-zinc-600 mb-3">{ACTION_INSTRUCTIONS["reading-level"]}</p>
-              {moreAiResults["reading-level"] && renderToolResult("reading-level", moreAiResults["reading-level"])}
             </div>
 
             {/* Internal Links */}

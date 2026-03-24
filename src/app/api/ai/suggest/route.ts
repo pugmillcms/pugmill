@@ -9,8 +9,8 @@ import { getConfig } from "@/lib/config";
 import { checkAndIncrementAi } from "@/lib/rate-limit";
 
 type SuggestType = "excerpt" | "titles" | "categories" | "tags" | "aeo" | "keywords"
-  | "slug" | "meta-title" | "headline-variants" | "topic-report" | "reading-level"
-  | "internal-links" | "tone-check" | "site-summary" | "site-faqs" | "refine-focus" | "social-post";
+  | "slug" | "topic-report" | "internal-links" | "tone-check" | "site-summary" | "site-faqs"
+  | "refine-focus" | "social-post";
 
 function buildSystemPrompt(type: SuggestType, authorVoice: string, opts: { existingTags?: string[] } = {}): string {
   const voiceClause = authorVoice
@@ -38,14 +38,8 @@ function buildSystemPrompt(type: SuggestType, authorVoice: string, opts: { exist
 Return ONLY valid JSON. No markdown fences, no explanation.`;
     case "slug":
       return `You are a URL slug generator. Convert the given post title into a clean, SEO-friendly URL slug: lowercase, words separated by hyphens, no special characters, max 60 characters. Return ONLY the slug string. No explanation.`;
-    case "meta-title":
-      return `${voiceClause}You are an SEO expert. Generate 3 alternative meta title variants for the given post. Each should be under 60 characters, include a primary keyword, and be optimised for search click-through. Return ONLY a JSON array of objects: [{"title":"...","reasoning":"one sentence why this works"}]. No explanation outside the JSON.`;
-    case "headline-variants":
-      return `${voiceClause}You are a copywriting expert. Generate two headline variants for the given post: one curiosity-driven (creates intrigue, uses a knowledge gap) and one utility-driven (clearly states the benefit or outcome). Return ONLY a JSON object: {"curiosity":"...","utility":"..."}. No explanation.`;
     case "topic-report":
       return `You are a content analyst. Identify the primary topic of the given post and evaluate how coherently the content covers that topic. Return ONLY a JSON object: {"topic":"primary topic in 3-5 words","score":1-5,"note":"one sentence observation about focus or coherence"}. Score 5 = laser-focused, 1 = scattered. No explanation outside the JSON.`;
-    case "reading-level":
-      return `${voiceClause}You are a readability expert. Analyse the reading level of the given post content. Return ONLY a JSON object: {"level":"e.g. High School / College / Expert","gradeLevel":number,"note":"one sentence on clarity and pace"}. If an Author's Voice is provided, add a "fit" field: "fits voice" or "too complex" or "too simple". No explanation outside the JSON.`;
     case "tone-check":
       return `${voiceClause}You are a tone and style editor. Analyse the given blog post content against the Author's Voice guide provided above. Identify passages where the tone, vocabulary, or style deviates from the guide. Return ONLY a JSON array of objects:\n[\n  {\n    "quote": "exact passage from the content (20-120 characters)",\n    "issue": "one sentence describing the tone problem",\n    "suggestion": "rewritten version of the passage that matches the voice guide"\n  }\n]\nIf the content already matches the voice guide well, return an empty array []. Return 0-6 items maximum. No markdown fences, no explanation outside the JSON.`;
     case "keywords":
