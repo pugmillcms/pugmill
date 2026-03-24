@@ -124,6 +124,13 @@ const ACTION_INSTRUCTIONS: Record<string, string> = {
   "brief": "Use this as your writing roadmap before drafting. Accept the suggested title and excerpt into the fields above, then follow the outline as your structure.",
 };
 
+const SOCIAL_PLATFORMS: { id: string; label: string; limit: number }[] = [
+  { id: "LinkedIn",  label: "LinkedIn",  limit: 3000 },
+  { id: "X",         label: "X",         limit: 280  },
+  { id: "Facebook",  label: "Facebook",  limit: 500  },
+  { id: "Substack",  label: "Substack",  limit: 800  },
+];
+
 function extractAssociatedMedia(markdown: string, allMedia: MediaItem[]): MediaItem[] {
   const urls = new Set<string>();
   for (const m of markdown.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)) urls.add(m[1]);
@@ -191,8 +198,10 @@ export default function PostForm({
   }, [isDirty, handleBeforeUnload]);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [aiUsage, setAiUsage] = useState<{ count: number; limit: number }>({ count: 0, limit: 50 });
   const [titleSuggestions, setTitleSuggestions] = useState<string[] | null>(null);
   const [refineResult, setRefineResult] = useState<string | null>(null);
+  const [refineFocusResult, setRefineFocusResult] = useState<Array<{ label: string; passage?: string; recommendation: string }> | null>(null);
   const [toneItems, setToneItems] = useState<Array<{ quote: string; issue: string; suggestion: string }> | null>(null);
   const [catSuggestions, setCatSuggestions] = useState<string[] | null>(null);
   const [tagSuggestions, setTagSuggestions] = useState<string[] | null>(null);
@@ -204,6 +213,9 @@ export default function PostForm({
   const [briefKeywords, setBriefKeywords] = useState("");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [appliedKey, setAppliedKey] = useState<string | null>(null);
+  const [socialPlatform, setSocialPlatform] = useState<string | null>(null);
+  const [socialDraft, setSocialDraft] = useState<string>("");
+  const [socialPending, setSocialPending] = useState(false);
 
   async function callAi(type: string, extra?: Record<string, unknown>): Promise<string | null> {
     setAiError(null);
@@ -218,8 +230,13 @@ export default function PostForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = (await res.json()) as { result?: string; error?: string };
-      if (!res.ok) { setAiError(data.error ?? "AI request failed"); return null; }
+      const data = (await res.json()) as { result?: string; error?: string; usage?: { count: number; limit: number } };
+      if (data.usage) setAiUsage(data.usage);
+      if (!res.ok) {
+        if (res.status === 429) setAiError(data.error ?? "AI rate limit reached. Try again in under an hour.");
+        else setAiError(data.error ?? "AI request failed");
+        return null;
+      }
       return data.result ?? null;
     } catch {
       setAiError("Network error — please try again.");
@@ -281,6 +298,43 @@ export default function PostForm({
     if (!result) return;
     try { setToneItems(parseJson<Array<{ quote: string; issue: string; suggestion: string }>>(result)); }
     catch { setAiError("Could not parse AI response. Try again."); }
+  }
+
+  async function handleRefineFocus() {
+    setRefineFocusResult(null);
+    setPendingAction("refine-focus");
+    const result = await callAi("refine-focus");
+    setPendingAction(null);
+    if (!result) return;
+    try {
+      setRefineFocusResult(parseJson<Array<{ label: string; passage?: string; recommendation: string }>>(result));
+    } catch { setAiError("Could not parse AI response. Try again."); }
+  }
+
+  async function handleSocialPost(platform: string) {
+    setSocialPlatform(platform);
+    setSocialDraft("");
+    setSocialPending(true);
+    setAiError(null);
+    const content = editorRef.current?.getContent() ?? "";
+    try {
+      const res = await fetch("/api/ai/suggest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "social-post", platform, postTitle: title, content, aeoMeta }),
+      });
+      const data = (await res.json()) as { result?: string; error?: string; usage?: { count: number; limit: number } };
+      if (data.usage) setAiUsage(data.usage);
+      if (!res.ok) {
+        if (res.status === 429) setAiError(data.error ?? "AI rate limit reached.");
+        else setAiError(data.error ?? "AI request failed");
+      } else if (data.result) {
+        setSocialDraft(data.result);
+      }
+    } catch {
+      setAiError("Network error — please try again.");
+    }
+    setSocialPending(false);
   }
 
   async function handleSuggestCategories() {
@@ -539,6 +593,30 @@ export default function PostForm({
               <span className="text-xs text-zinc-500 ml-2">{report.score}/5</span>
             </div>
             <p className="text-sm text-zinc-600">{report.note}</p>
+            {report.score < 5 && (
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleSuggestTitles}
+                  disabled={!!pendingAction}
+                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Suggest Titles
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRefineFocus}
+                  disabled={!!pendingAction}
+                  className={`inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border text-white disabled:cursor-not-allowed transition-colors ${
+                    pendingAction === "refine-focus"
+                      ? "btn-processing border-transparent"
+                      : "bg-zinc-800 border-zinc-800 hover:bg-zinc-700 disabled:opacity-40"
+                  }`}
+                >
+                  {pendingAction === "refine-focus" ? "Analyzing…" : "Refine Focus"}
+                </button>
+              </div>
+            )}
           </div>
         );
       } else if (action === "reading-level") {
@@ -1034,7 +1112,11 @@ export default function PostForm({
               type="button"
               onClick={handleGenerateAll}
               disabled={!!pendingAction}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-white text-sm font-medium disabled:cursor-not-allowed shrink-0 transition-colors ${
+                pendingAction === "generate-all"
+                  ? "btn-processing"
+                  : "bg-zinc-900 hover:bg-zinc-700 disabled:opacity-40"
+              }`}
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -1043,6 +1125,31 @@ export default function PostForm({
             </button>
           </div>
         )}
+
+        {/* AI usage meter */}
+        {aiEnabled && (() => {
+          const { count, limit } = aiUsage;
+          const pct       = Math.min(count / limit * 100, 100);
+          const barColor  = count >= 40 ? "bg-red-500"    : count >= 30 ? "bg-orange-500" : count >= 20 ? "bg-amber-400" : "bg-green-500";
+          const textColor = count >= 40 ? "text-red-600"  : count >= 30 ? "text-orange-600" : count >= 20 ? "text-amber-600" : "text-zinc-400";
+          const label     = count >= limit
+            ? "Limit reached — resets in under 1 hour"
+            : `${count} / ${limit} AI calls this hour`;
+          return (
+            <div className="bg-white border border-zinc-200 rounded-lg px-6 py-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs text-zinc-400">AI usage</span>
+                <span className={`text-xs font-medium ${textColor}`}>{label}</span>
+              </div>
+              <div className="w-full h-1 bg-zinc-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${barColor}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          );
+        })()}
 
         {/* AEO Metadata */}
         <div className="bg-white border border-zinc-200 rounded-lg p-6">
@@ -1150,6 +1257,25 @@ export default function PostForm({
               </div>
               <p className="text-xs text-zinc-600 mb-3">{ACTION_INSTRUCTIONS["topic-report"]}</p>
               {moreAiResults["topic-report"] && renderToolResult("topic-report", moreAiResults["topic-report"])}
+              {refineFocusResult && refineFocusResult.length === 0 && (
+                <p className="mt-3 text-xs text-green-600 font-medium">Post is well-focused — no issues found.</p>
+              )}
+              {refineFocusResult && refineFocusResult.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {refineFocusResult.map((issue, i) => (
+                    <div key={i} className="p-3 bg-amber-50 border-l-2 border-amber-400 rounded-r">
+                      <p className="text-xs font-semibold text-zinc-800">{issue.label}</p>
+                      {issue.passage && (
+                        <p className="text-xs text-zinc-500 italic mt-0.5">&ldquo;{issue.passage}&rdquo;</p>
+                      )}
+                      <p className="text-xs text-zinc-700 mt-1">{issue.recommendation}</p>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => setRefineFocusResult(null)} className="text-xs text-zinc-400 hover:text-zinc-600 transition-colors">
+                    Dismiss
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Reading Level */}
@@ -1170,6 +1296,71 @@ export default function PostForm({
               </div>
               <p className="text-xs text-zinc-600 mb-3">{ACTION_INSTRUCTIONS["internal-links"]}</p>
               {moreAiResults["internal-links"] && renderToolResult("internal-links", moreAiResults["internal-links"])}
+            </div>
+
+            {/* Social Post Generator */}
+            <div className="bg-white border border-zinc-200 rounded-lg p-6">
+              <div className="mb-3">
+                <SectionLabel>Social Post</SectionLabel>
+                <p className="text-xs text-zinc-600">Generate a platform-ready post draft. Click a platform to generate — click again to regenerate.</p>
+              </div>
+              <div className="flex gap-2 flex-wrap mb-3">
+                {SOCIAL_PLATFORMS.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => handleSocialPost(p.id)}
+                    disabled={socialPending}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                      socialPlatform === p.id && socialPending
+                        ? "border-blue-500 text-blue-700 bg-blue-50 opacity-100 cursor-wait"
+                        : socialPlatform === p.id && !socialPending
+                          ? "border-blue-500 bg-blue-500 text-white"
+                          : socialPending
+                            ? "border-zinc-100 text-zinc-300 bg-white cursor-not-allowed"
+                            : "border-zinc-200 text-zinc-600 bg-white hover:border-blue-300 hover:text-blue-600"
+                    }`}
+                  >
+                    {socialPlatform === p.id && socialPending ? "Generating…" : p.label}
+                  </button>
+                ))}
+              </div>
+              {socialPending && (
+                <div className="h-1.5 rounded-full overflow-hidden mb-3">
+                  <div className="h-full w-full btn-processing rounded-full" />
+                </div>
+              )}
+              {socialDraft && !socialPending && (() => {
+                const plat = SOCIAL_PLATFORMS.find(p => p.id === socialPlatform);
+                const limit = plat?.limit ?? Infinity;
+                const over = socialDraft.length > limit;
+                return (
+                  <div className="space-y-2">
+                    <textarea
+                      value={socialDraft}
+                      onChange={e => setSocialDraft(e.target.value)}
+                      rows={5}
+                      className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm text-zinc-800 resize-y focus:outline-none focus:ring-2 focus:ring-zinc-400"
+                    />
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs font-mono ${over ? "text-red-500 font-semibold" : "text-zinc-400"}`}>
+                        {socialDraft.length}{limit !== Infinity ? ` / ${limit}` : ""}
+                        {over && ` — ${socialDraft.length - limit} over limit`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(socialDraft).then(() => {
+                          setCopiedKey("social");
+                          setTimeout(() => setCopiedKey(null), 2000);
+                        })}
+                        className="text-xs text-zinc-500 hover:text-zinc-800 font-medium transition-colors"
+                      >
+                        {copiedKey === "social" ? "Copied!" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </>
         )}

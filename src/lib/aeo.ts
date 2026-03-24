@@ -20,6 +20,19 @@ export const aeoSchema = z.object({
 export type AeoMetadata = NonNullable<z.infer<typeof aeoSchema>>;
 
 /**
+ * Compute a 0–3 AEO completeness score for a post.
+ * Criteria: summary filled (1), at least one Q&A pair (1), at least one entity (1).
+ */
+export function calcAeoScore(aeo: AeoMetadata | null): { score: number; dots: boolean[] } {
+  if (!aeo) return { score: 0, dots: [false, false, false] };
+  const hasSummary  = !!aeo.summary?.trim();
+  const hasQa       = (aeo.questions ?? []).some(q => q.q && q.a);
+  const hasEntities = (aeo.entities  ?? []).some(e => e.name);
+  const dots = [hasSummary, hasQa, hasEntities];
+  return { score: dots.filter(Boolean).length, dots };
+}
+
+/**
  * Safely parse the aeo_metadata JSONB value from the database.
  * Returns null if the value is absent, not valid JSON, or fails schema validation.
  */

@@ -6,10 +6,11 @@ import { db } from "@/lib/db";
 import { adminUsers, posts } from "@/lib/db/schema";
 import { and, eq, ne, desc } from "drizzle-orm";
 import { getConfig } from "@/lib/config";
+import { checkAndIncrementAi } from "@/lib/rate-limit";
 
 type SuggestType = "excerpt" | "titles" | "categories" | "tags" | "aeo" | "keywords"
   | "slug" | "meta-title" | "headline-variants" | "topic-report" | "reading-level" | "brief"
-  | "internal-links" | "tone-check" | "site-summary" | "site-faqs";
+  | "internal-links" | "tone-check" | "site-summary" | "site-faqs" | "refine-focus" | "social-post";
 
 function buildSystemPrompt(type: SuggestType, authorVoice: string, opts: { existingTags?: string[] } = {}): string {
   const voiceClause = authorVoice
@@ -53,6 +54,8 @@ Return ONLY valid JSON. No markdown fences, no explanation.`;
       return `You are an AEO (Answer Engine Optimisation) expert. Given a site name and a sample of its published post titles and excerpts, write a 2-4 sentence factual site summary for AI crawlers and llms.txt. The summary must describe: what topics the site covers, who it is for, and what value it provides. Write in third person. Be specific — avoid generic phrases like "covers a wide range of topics". Return ONLY the summary text, nothing else.`;
     case "site-faqs":
       return `You are an AEO expert. Given a site name and a sample of its published post titles, generate 4-6 frequently asked questions a visitor might ask about this site and its subject area. Each answer must be a complete, standalone sentence — no "See above" or "As mentioned". Return ONLY a JSON array: [{"q":"...","a":"..."}]. No markdown fences, no explanation outside the JSON.`;
+    case "refine-focus":
+      return `You are a content focus analyst. Identify up to 4 specific areas where the given blog post loses focus, goes off-topic, or dilutes the core message. For each issue, provide a concise actionable recommendation. Return ONLY a JSON array: [{"label":"brief issue title in 3-5 words","passage":"optional exact verbatim quote from the content, 20-100 characters","recommendation":"one actionable sentence"}]. If the post is well-focused, return []. No markdown fences, no explanation outside the JSON.`;
     case "brief":
       return `${voiceClause}You are an expert content strategist. Generate a structured content brief for a blog post. Return ONLY a JSON object with these exact fields:
 {
@@ -66,6 +69,9 @@ Return ONLY valid JSON. No markdown fences, no explanation.`;
   "suggestedExcerpt": "compelling 1-2 sentence excerpt under 160 characters"
 }
 No markdown fences, no explanation outside the JSON.`;
+    case "social-post":
+      // Platform prompt is built in the special-case handler below; this branch is never reached.
+      return "";
   }
 }
 
@@ -73,6 +79,14 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const usage = await checkAndIncrementAi(String(session.user.id));
+  if (!usage.allowed) {
+    return NextResponse.json(
+      { error: "AI rate limit reached. Your limit resets in under 1 hour.", usage },
+      { status: 429 },
+    );
   }
 
   const ai = await getAiProvider();
@@ -88,15 +102,17 @@ export async function POST(req: NextRequest) {
     audience:     z.string().max(500).optional(),
     keywords:     z.string().max(1000).optional(),
     existingTags: z.array(z.string().max(100)).max(200).optional(),
+    platform:     z.string().max(50).optional(),
+    aeoMeta:      z.record(z.unknown()).optional(),
   });
 
   const bodyResult = bodySchema.safeParse(await req.json());
   if (!bodyResult.success) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
-  const { content, postTitle, type, postId, audience, keywords, existingTags } = bodyResult.data;
-  // slug and brief only need the title; all other types require content
-  if (!type || (type !== "slug" && type !== "brief" && !content)) {
+  const { content, postTitle, type, postId, audience, keywords, existingTags, platform, aeoMeta } = bodyResult.data;
+  // slug, brief, and social-post only need the title/meta; all other types require content
+  if (!type || (type !== "slug" && type !== "brief" && type !== "social-post" && !content)) {
     return NextResponse.json({ error: "content and type are required" }, { status: 400 });
   }
 
@@ -126,10 +142,10 @@ export async function POST(req: NextRequest) {
 
     try {
       const result = await ai.complete(systemPrompt, userPrompt);
-      return NextResponse.json({ result });
+      return NextResponse.json({ result, usage });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "AI request failed";
-      return NextResponse.json({ error: msg }, { status: 502 });
+      return NextResponse.json({ error: msg, usage }, { status: 502 });
     }
   }
 
@@ -176,10 +192,56 @@ No markdown fences. No explanation outside the JSON. Only suggest posts that are
 
     try {
       const result = await ai.complete(systemPrompt, userPrompt);
-      return NextResponse.json({ result });
+      return NextResponse.json({ result, usage });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "AI request failed";
-      return NextResponse.json({ error: msg }, { status: 502 });
+      return NextResponse.json({ error: msg, usage }, { status: 502 });
+    }
+  }
+
+  // ── Social post generation ────────────────────────────────────────────────
+  if (type === "social-post") {
+    const plat = (platform ?? "LinkedIn").trim();
+
+    const platformGuide: Record<string, string> = {
+      LinkedIn: "Write for LinkedIn. Professional tone, insight-forward, 2-4 short paragraphs. Max 3000 characters. No hashtag spam — 2-3 relevant hashtags max at the end.",
+      X:        "Write for X (formerly Twitter). Punchy and direct. One concise insight or hook — lead with the strongest line. Max 280 characters. No hashtags unless they add real value.",
+      Facebook: "Write for Facebook. Conversational and approachable. 2-3 short paragraphs with a question or call-to-action at the end. Max 500 characters.",
+      Substack: "Write for a Substack Notes post. Thoughtful and personal, like a note to readers. 2-4 paragraphs. Max 800 characters. No hashtags.",
+    };
+    const guide = platformGuide[plat] ?? `Write a social post for ${plat}. Be engaging and concise.`;
+
+    const systemPrompt = `You are a social media copywriter. ${guide} Return ONLY the post text, ready to copy and paste. No commentary, no labels, no markdown formatting.`;
+
+    // Build user prompt — prefer AEO metadata over raw content
+    let userPrompt = "";
+    if (aeoMeta && typeof aeoMeta === "object") {
+      const meta = aeoMeta as { summary?: string; questions?: { q: string; a: string }[]; keywords?: string[] };
+      const parts: string[] = [];
+      if (postTitle) parts.push(`Post title: "${postTitle}"`);
+      if (meta.summary) parts.push(`Summary: ${meta.summary}`);
+      if (meta.questions?.length) {
+        const topQa = meta.questions.slice(0, 2).map(q => `Q: ${q.q}\nA: ${q.a}`).join("\n");
+        parts.push(`Key Q&A:\n${topQa}`);
+      }
+      if (meta.keywords?.length) parts.push(`Keywords: ${meta.keywords.slice(0, 8).join(", ")}`);
+      userPrompt = parts.join("\n\n");
+    }
+    if (!userPrompt && content) {
+      userPrompt = postTitle
+        ? `Post title: "${postTitle}"\n\nPost content:\n${content.slice(0, 3000)}`
+        : `Post content:\n${content.slice(0, 3000)}`;
+    }
+    if (!userPrompt) {
+      userPrompt = postTitle ? `Post title: "${postTitle}"` : "Write a compelling social post about this content.";
+    }
+
+    try {
+      const result = await ai.complete(systemPrompt, userPrompt);
+      return NextResponse.json({ result, usage });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "AI request failed";
+      return NextResponse.json({ error: msg, usage }, { status: 502 });
     }
   }
 
@@ -203,9 +265,9 @@ No markdown fences. No explanation outside the JSON. Only suggest posts that are
 
   try {
     const result = await ai.complete(systemPrompt, userPrompt);
-    return NextResponse.json({ result });
+    return NextResponse.json({ result, usage });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "AI request failed";
-    return NextResponse.json({ error: msg }, { status: 502 });
+    return NextResponse.json({ error: msg, usage }, { status: 502 });
   }
 }

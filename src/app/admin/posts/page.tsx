@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { posts } from "@/lib/db/schema";
 import { eq, and, asc, desc } from "drizzle-orm";
 import { DeletePostButton } from "./DeletePostButton";
+import { parseAeoMetadata, calcAeoScore } from "@/lib/aeo";
 
 type SearchParams = {
   type?: string;
@@ -111,7 +112,7 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
                 </Link>
               </th>
               <th className={th}>Type</th>
-              <th className={`${th} hidden md:table-cell`}>Slug</th>
+              <th className={`${th} hidden md:table-cell`}>AEO</th>
               <th className={th}>Status</th>
               <th className={th}>
                 <Link href={sortHref(sp, "date")} className="hover:text-zinc-700 inline-flex items-center">
@@ -139,7 +140,27 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
                       {post.type === "page" ? "Page" : "Post"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-zinc-400 font-mono text-xs hidden md:table-cell">{post.slug}</td>
+                  <td className="px-4 py-3 hidden md:table-cell">
+                    {(() => {
+                      const { score, dots } = calcAeoScore(parseAeoMetadata(post.aeoMetadata));
+                      return (
+                        <div
+                          className="flex items-center gap-1"
+                          title={`AEO: ${score}/3 (summary · Q&A · entities)`}
+                        >
+                          {dots.map((filled, i) => (
+                            <span key={i} className={`w-2 h-2 rounded-full ${filled ? "bg-green-500" : "bg-zinc-200"}`} />
+                          ))}
+                          {score === 3 && (
+                            <span className="text-xs text-green-600 font-medium ml-0.5">Complete</span>
+                          )}
+                          {score === 0 && (
+                            <span className="text-xs text-zinc-400 ml-0.5">None</span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </td>
                   <td className="px-4 py-3">
                     {post.published ? (
                       <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Published</span>

@@ -200,6 +200,15 @@ export const widgetSettings = pgTable("widget_settings", {
   uniqueIndex("widget_settings_widget_key_idx").on(t.widgetId, t.key),
 ]);
 
+// --- AI Usage Table ---
+// Per-user hourly AI call counter. One row per user; window resets after 1 hour.
+// userId is the PK — no FK so orphaned rows from deleted users are harmless.
+export const aiUsage = pgTable("ai_usage", {
+  userId:      text("user_id").primaryKey(),
+  windowStart: timestamp("window_start").notNull().defaultNow(),
+  count:       integer("count").notNull().default(0),
+});
+
 // --- Relations ---
 export const postsRelations = relations(posts, ({ one, many }) => ({
   author: one(adminUsers, { fields: [posts.authorId], references: [adminUsers.id] }),

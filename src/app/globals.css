@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Barber-pole processing animation ───────────────────────────────────── */
+@keyframes barberpole {
+  from { background-position: 0 0; }
+  to   { background-position: 28px 0; }
+}
+.btn-processing {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    #3f3f46 0px, #3f3f46 10px,
+    #27272a 10px, #27272a 20px
+  );
+  background-size: 28px 28px;
+  animation: barberpole 0.5s linear infinite;
+  color: #fff;
+}
+
 :root {
   --ds-blue-1000: #00254D;
   --ds-blue-900:  #003875;  /* hover state */

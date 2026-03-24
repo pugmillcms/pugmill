@@ -1,4 +1,7 @@
 import { LRUCache } from "lru-cache";
+import { db } from "@/lib/db";
+import { aiUsage } from "@/lib/db/schema";
+import { eq, sql } from "drizzle-orm";
 
 type Options = {
   uniqueTokenPerInterval?: number;
@@ -63,6 +66,59 @@ export const submissionLimiter = createRateLimiter({
 });
 
 export const SUBMISSION_RATE_LIMIT = 5;
+
+// ─── AI usage rate limiter ─────────────────────────────────────────────────
+// Per-user hourly call counter stored in the ai_usage DB table.
+// One row per user; the window resets after 1 hour.
+//
+// Warning tiers:
+//   0–19  green   (all good)
+//   20–29 amber   (heads up)
+//   30–39 orange  (slowing down)
+//   40–49 red     (almost at limit)
+//   50    blocked (try again in < 1 hour)
+
+export const AI_RATE_LIMIT  = 50;
+export const AI_RATE_WINDOW = 60 * 60 * 1000; // 1 hour in ms
+
+export interface AiUsageResult {
+  allowed: boolean;
+  count:   number;
+  limit:   number;
+}
+
+/**
+ * Atomically increment the AI call counter for this user.
+ * Resets the window if it expired. Returns the new count and whether allowed.
+ */
+export async function checkAndIncrementAi(userId: string): Promise<AiUsageResult> {
+  const now          = new Date();
+  const windowCutoff = new Date(now.getTime() - AI_RATE_WINDOW);
+
+  await db.execute(
+    sql`INSERT INTO ai_usage (user_id, window_start, count)
+        VALUES (${userId}, ${now}, 1)
+        ON CONFLICT (user_id) DO UPDATE SET
+          count       = CASE WHEN ai_usage.window_start < ${windowCutoff} THEN 1 ELSE ai_usage.count + 1 END,
+          window_start = CASE WHEN ai_usage.window_start < ${windowCutoff} THEN ${now} ELSE ai_usage.window_start END`,
+  );
+
+  const rows  = await db.select().from(aiUsage).where(eq(aiUsage.userId, userId));
+  const count = rows[0]?.count ?? 1;
+  return { allowed: count <= AI_RATE_LIMIT, count, limit: AI_RATE_LIMIT };
+}
+
+/**
+ * Read the current AI usage without incrementing.
+ * Returns count: 0 if the window has expired or no record exists.
+ */
+export async function getAiUsage(userId: string): Promise<{ count: number; limit: number }> {
+  const windowCutoff = new Date(Date.now() - AI_RATE_WINDOW);
+  const rows = await db.select().from(aiUsage).where(eq(aiUsage.userId, userId));
+  const row  = rows[0];
+  if (!row || row.windowStart < windowCutoff) return { count: 0, limit: AI_RATE_LIMIT };
+  return { count: row.count, limit: AI_RATE_LIMIT };
+}
 
 // Public API rate limiter: max 60 requests per minute per IP
 export const apiLimiter = createRateLimiter({

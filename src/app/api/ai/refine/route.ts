@@ -4,11 +4,20 @@ import { getAiProvider } from "@/lib/ai";
 import { db } from "@/lib/db";
 import { adminUsers } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { checkAndIncrementAi } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const usage = await checkAndIncrementAi(String(session.user.id));
+  if (!usage.allowed) {
+    return NextResponse.json(
+      { error: "AI rate limit reached. Your limit resets in under 1 hour.", usage },
+      { status: 429 },
+    );
   }
 
   const ai = await getAiProvider();
@@ -58,9 +67,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await ai.complete(systemPrompt, userPrompt);
-    return NextResponse.json({ result });
+    return NextResponse.json({ result, usage });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "AI request failed";
-    return NextResponse.json({ error: msg }, { status: 502 });
+    return NextResponse.json({ error: msg, usage }, { status: 502 });
   }
 }
