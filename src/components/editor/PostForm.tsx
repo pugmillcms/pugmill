@@ -916,7 +916,31 @@ export default function PostForm({
           <div className="bg-white border border-zinc-200 rounded-lg p-3 lg:flex-[1] lg:sticky lg:top-[52px] lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto flex flex-col gap-3">
             <p className="text-xs font-semibold tracking-widest text-zinc-700 uppercase shrink-0">Images</p>
             {featuredId !== null && (
-              <input type="hidden" name="featuredImage" value={featuredId} />
+              <>
+                <input type="hidden" name="featuredImage" value={featuredId} />
+                {(() => {
+                  const featuredUrl = sharedMedia.find(m => m.id === featuredId)?.url ?? initialFeaturedImageUrl;
+                  return featuredUrl ? (
+                    <div className="shrink-0">
+                      <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1">Featured image</p>
+                      <div className="relative rounded-md overflow-hidden bg-zinc-100">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={featuredUrl} alt="Featured" className="w-full object-cover max-h-32" />
+                        <button
+                          type="button"
+                          onClick={() => setFeaturedId(null)}
+                          className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white rounded-full w-5 h-5 flex items-center justify-center transition-colors"
+                          title="Remove featured image"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
+              </>
             )}
             <PostImagePanel
               mode={mode}

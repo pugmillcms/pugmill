@@ -9,12 +9,12 @@ import { getThemePageView } from "@/lib/theme-modules";
 import { cookies } from "next/headers";
 import { hooks } from "@/lib/hooks";
 import type { PostPayload } from "@/lib/hook-catalogue";
-import type { ArticleLayoutConfig } from "../../../themes/default/design";
+import type { ArticleLayoutConfig } from "../../../../themes/default/design";
 import type { Metadata } from "next";
 import WidgetArea from "@/components/widgets/WidgetArea";
 import { getWidgetAreaAssignment } from "@/lib/actions/widgets";
 import type { WidgetContext } from "@/types/widget";
-import type { Breadcrumb } from "../../../themes/default/views/PageView";
+import type { Breadcrumb } from "../../../../themes/default/views/PageView";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

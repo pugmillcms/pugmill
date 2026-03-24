@@ -27,7 +27,7 @@ Key features include:
 
 ## Who It's For
 
-Pugmill is built for developers setting up content sites for themselves or their clients. It assumes you're comfortable with a terminal and a `.env` file. Everything else — content, design, plugins — is managed through the admin interface.
+Pugmill is built for developers setting up content sites for themselves or their clients. It assumes you're comfortable with a terminal and a .env file. Everything else — content, design, plugins — is managed through the admin interface.
 
 ## Getting Started
 

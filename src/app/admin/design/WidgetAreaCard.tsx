@@ -25,7 +25,7 @@ export default function WidgetAreaCard({
   const [activeIds, setActiveIds] = useState<string[]>(initialWidgetIds);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
-  const savedTimer = useRef<ReturnType<typeof setTimeout>>();
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => () => clearTimeout(savedTimer.current), []);
 

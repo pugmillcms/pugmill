@@ -133,7 +133,7 @@ export async function createNotification(payload: CreateNotificationPayload): Pr
           read: sql`false`,
           itemCount: sql`EXCLUDED.item_count`,
           createdAt: sql`NOW()`,
-        },
+        } as Record<string, unknown>,
       });
   } else {
     await db.insert(adminNotifications).values(row);

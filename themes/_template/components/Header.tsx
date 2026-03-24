@@ -21,7 +21,7 @@ export default async function Header() {
   // Pass nav items through the "nav:items" filter so plugins can add,
   // remove, or reorder navigation entries without modifying this file.
   const rawNavItems = (config.appearance?.navigation as { label: string; path: string }[]) ?? [];
-  const navItems = await hooks.applyFilters("nav:items", rawNavItems);
+  const navItems = await hooks.applyFilters("nav:items", { input: rawNavItems });
 
   return (
     <HeaderClient
