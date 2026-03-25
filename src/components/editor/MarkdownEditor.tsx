@@ -187,9 +187,13 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function Markdown
         if (idx === -1) return;
         const from = pos + idx;
         const to = from + text.length;
-        editor.chain().focus().setTextSelection({ from, to }).scrollIntoView().run();
+        editor.chain().focus().setTextSelection({ from, to }).run();
         found = true;
       });
+      if (found) {
+        // Scroll the page so the editor is visible at the top of the viewport
+        editor.view.dom.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
       return found;
     },
   }));
