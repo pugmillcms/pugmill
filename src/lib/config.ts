@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
+import { detectSiteUrl } from "@/lib/detect-site-url";
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
@@ -161,6 +162,14 @@ export async function getConfig(): Promise<Config> {
       // First boot: seed from JSON file or defaults.
       // Use onConflictDoNothing to handle concurrent first-boot race conditions safely.
       const seed = loadSeedFromFile();
+
+      // Auto-detect the public URL from trusted platform env vars so that
+      // config.site.url reflects the real deployment URL from day one rather
+      // than staying as the localhost placeholder.
+      const detectedUrl = detectSiteUrl();
+      if (detectedUrl && seed.site.url === DEFAULT_CONFIG.site.url) {
+        seed.site.url = detectedUrl;
+      }
       await db.insert(siteConfig).values({ id: 1, config: seed } as typeof siteConfig.$inferInsert).onConflictDoNothing();
       // Re-fetch in case another instance won the race and inserted a different seed.
       const refetch = await db.select().from(siteConfig).where(eq(siteConfig.id, 1));

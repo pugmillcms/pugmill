@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { posts, media, adminUsers, sessions, themeDesignConfigs } from "@/lib/db/schema";
 import { sql, gte, isNotNull, notInArray, eq } from "drizzle-orm";
 import { getConfig } from "@/lib/config";
+import { isDevUrl } from "@/lib/detect-site-url";
 import DashboardCharts from "@/components/admin/DashboardCharts";
 import GettingStartedCard from "@/components/admin/GettingStartedCard";
 
@@ -169,10 +170,29 @@ export default async function AdminDashboard() {
   ];
   const allStepsDone = onboardingSteps.every(s => s.done);
   const showOnboarding = !config.system.onboardingDismissed && !allStepsDone;
+  const showUrlWarning = isDevUrl(config.site.url);
 
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-zinc-800">Dashboard</h2>
+
+      {showUrlWarning && (
+        <div className="bg-amber-50 border border-amber-300 rounded-lg p-4">
+          <p className="text-sm font-semibold text-amber-800 mb-1">
+            Action required before going live: set your production URL
+          </p>
+          <p className="text-sm text-amber-700 mb-2">
+            Your site URL is currently set to <code className="bg-amber-100 px-1 rounded font-mono text-xs">{config.site.url}</code>, which is a development address.
+            Authentication will not work correctly on a custom domain until <code className="bg-amber-100 px-1 rounded font-mono text-xs">NEXTAUTH_URL</code> is updated to your real URL (e.g. <code className="bg-amber-100 px-1 rounded font-mono text-xs">https://yourdomain.com</code>).
+          </p>
+          <p className="text-sm text-amber-700">
+            <strong>To fix:</strong> update the <code className="bg-amber-100 px-1 rounded font-mono text-xs">NEXTAUTH_URL</code> environment variable in your host&apos;s secrets or environment settings to your production domain, then redeploy.
+            You can ask your AI agent to do this — tell it: <em>&quot;Set NEXTAUTH_URL to https://yourdomain.com in the environment secrets.&quot;</em>
+            Once set, this notice will disappear automatically.
+          </p>
+        </div>
+      )}
+
       {showOnboarding && <GettingStartedCard steps={onboardingSteps} />}
       <DashboardCharts
         monthly={monthly}
