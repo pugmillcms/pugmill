@@ -155,6 +155,15 @@ export default function TaxonomyPicker({ label, fieldName, items, selectedIds, o
                 + {item.name}
               </button>
             ))}
+            {availableItems.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setSelected(prev => new Set([...prev, ...availableItems.map(i => i.id)]))}
+                className="text-xs px-2.5 py-1 rounded-full bg-white border border-zinc-300 text-zinc-500 hover:border-blue-300 hover:text-blue-700 hover:bg-blue-50 transition"
+              >
+                + Add all
+              </button>
+            )}
           </div>
         )}
 
