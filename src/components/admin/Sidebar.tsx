@@ -174,7 +174,7 @@ export default function Sidebar({ isOpen, onClose, plugins = [], badges = {} }: 
               {item.path === "/admin/posts" && inContentSection && (
                 <SubNav items={contentSubItems} />
               )}
-              {item.path === "/admin/themes" && inDesignSection && (
+              {item.path === "/admin/design" && inDesignSection && (
                 <SubNav items={designSubItems} />
               )}
               {item.path === "/admin/plugins" && inPluginsSection && (
