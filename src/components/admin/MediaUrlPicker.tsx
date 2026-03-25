@@ -21,6 +21,24 @@ export default function MediaUrlPicker({ label, name, defaultValue, hint, allMed
   const [url, setUrl] = useState(defaultValue ?? "");
   const [panelOpen, setPanelOpen] = useState(false);
   const [localMedia, setLocalMedia] = useState<MediaItem[]>(allMedia);
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function openPanel() {
+    if (panelOpen) { setPanelOpen(false); return; }
+    setPanelOpen(true);
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/media?limit=200");
+      if (res.ok) {
+        const json = await res.json();
+        const items: MediaItem[] = (json.data ?? []).map((m: { id: number; url: string; fileName: string }) => ({
+          id: m.id, url: m.url, fileName: m.fileName,
+        }));
+        setLocalMedia(items);
+      }
+    } catch { /* silently keep existing list */ }
+    finally { setRefreshing(false); }
+  }
 
   function select(item: MediaItem) {
     setUrl(item.url);
@@ -55,14 +73,14 @@ export default function MediaUrlPicker({ label, name, defaultValue, hint, allMed
         />
         <button
           type="button"
-          onClick={() => setPanelOpen(v => !v)}
+          onClick={openPanel}
           className={`shrink-0 px-3 py-2 text-sm border rounded-lg bg-white transition-colors ${
             panelOpen
               ? "border-zinc-500 text-zinc-900"
               : "border-zinc-200 text-zinc-600 hover:bg-zinc-50"
           }`}
         >
-          Library
+          {refreshing ? "…" : "Library"}
         </button>
         {url && (
           <button
