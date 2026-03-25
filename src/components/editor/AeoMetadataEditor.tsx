@@ -1,5 +1,5 @@
 "use client";
-import { useState, forwardRef, useImperativeHandle } from "react";
+import { useState, forwardRef, useImperativeHandle, useRef } from "react";
 
 export interface AeoMetadata {
   summary?: string;
@@ -30,6 +30,8 @@ const AeoMetadataEditor = forwardRef<AeoMetadataEditorHandle, Props>(function Ae
     defaultValue?.entities ?? []
   );
   const [keywords, setKeywords] = useState<string[]>(defaultValue?.keywords ?? []);
+  const [kwInput, setKwInput] = useState("");
+  const kwInputRef = useRef<HTMLInputElement>(null);
 
   function buildValue(
     s: string,
@@ -50,7 +52,7 @@ const AeoMetadataEditor = forwardRef<AeoMetadataEditorHandle, Props>(function Ae
       const s = aeo.summary ?? "";
       const qs = aeo.questions ?? [];
       const es = aeo.entities ?? [];
-      const kws = aeo.keywords ?? [];
+      const kws = (aeo.keywords ?? []).slice(0, 10);
       setSummary(s);
       setQuestions(qs);
       setEntities(es);
@@ -235,6 +237,91 @@ const AeoMetadataEditor = forwardRef<AeoMetadataEditorHandle, Props>(function Ae
             <p className="text-xs text-zinc-400 italic py-1">No entities yet.</p>
           )}
         </div>
+      </div>
+
+      {/* Keywords */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-sm font-medium text-zinc-700">
+            Keywords
+            <span className="font-normal text-zinc-400 ml-1.5 text-xs">— 5–10 specific, search-focused terms</span>
+          </label>
+          <span className={`text-xs font-medium ${keywords.length >= 5 ? "text-green-600" : "text-zinc-400"}`}>
+            {keywords.length}/10
+          </span>
+        </div>
+
+        {/* Tag pills */}
+        {keywords.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {keywords.map((kw, i) => (
+              <span key={i} className="inline-flex items-center gap-1 bg-zinc-100 text-zinc-700 text-xs px-2 py-0.5 rounded-full">
+                {kw}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = keywords.filter((_, j) => j !== i);
+                    setKeywords(next);
+                    onChange?.(buildValue(summary, questions, entities, next));
+                  }}
+                  className="text-zinc-400 hover:text-zinc-700 transition-colors leading-none"
+                  aria-label={`Remove ${kw}`}
+                >×</button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Input */}
+        {keywords.length < 10 ? (
+          <>
+            <div className="flex gap-2">
+              <input
+                ref={kwInputRef}
+                type="text"
+                value={kwInput}
+                onChange={e => setKwInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" || e.key === ",") {
+                    e.preventDefault();
+                    const trimmed = kwInput.trim().replace(/,$/, "");
+                    if (trimmed && !keywords.includes(trimmed) && keywords.length < 10) {
+                      const next = [...keywords, trimmed];
+                      setKeywords(next);
+                      onChange?.(buildValue(summary, questions, entities, next));
+                    }
+                    setKwInput("");
+                  } else if (e.key === "Backspace" && kwInput === "" && keywords.length > 0) {
+                    const next = keywords.slice(0, -1);
+                    setKeywords(next);
+                    onChange?.(buildValue(summary, questions, entities, next));
+                  }
+                }}
+                placeholder="Type a keyword and press Enter"
+                className="flex-1 border border-zinc-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-400"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const trimmed = kwInput.trim();
+                  if (trimmed && !keywords.includes(trimmed) && keywords.length < 10) {
+                    const next = [...keywords, trimmed];
+                    setKeywords(next);
+                    onChange?.(buildValue(summary, questions, entities, next));
+                  }
+                  setKwInput("");
+                  kwInputRef.current?.focus();
+                }}
+                className="px-3 py-2 text-xs border border-zinc-200 rounded-lg text-zinc-600 hover:bg-zinc-50 transition-colors"
+              >
+                Add
+              </button>
+            </div>
+            <p className="text-xs text-zinc-400 mt-1.5">Press Enter or comma to add. Backspace removes the last keyword.</p>
+          </>
+        ) : (
+          <p className="text-xs text-zinc-400">10 keyword limit reached — remove one to add another.</p>
+        )}
       </div>
     </div>
   );

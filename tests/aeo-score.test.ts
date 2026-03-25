@@ -108,9 +108,28 @@ describe("parseAeoMetadata", () => {
     expect(parseAeoMetadata({})).not.toBeNull();
   });
 
-  it("rejects a summary that exceeds 1000 characters", () => {
-    const result = parseAeoMetadata({ summary: "x".repeat(1001) });
-    expect(result).toBeNull();
+  it("truncates a summary that exceeds 2000 characters via the lenient fallback", () => {
+    const result = parseAeoMetadata({ summary: "x".repeat(2001) });
+    expect(result?.summary?.length).toBe(2000);
+  });
+
+  it("returns null for a summary that is exactly at the 2000-character limit", () => {
+    const result = parseAeoMetadata({ summary: "x".repeat(2000) });
+    expect(result?.summary?.length).toBe(2000);
+  });
+
+  it("truncates keywords array to 10 via the lenient fallback", () => {
+    const kws = Array.from({ length: 15 }, (_, i) => `keyword-${i}`);
+    const result = parseAeoMetadata({ keywords: kws });
+    expect(result?.keywords?.length).toBe(10);
+    expect(result?.keywords?.[0]).toBe("keyword-0");
+    expect(result?.keywords?.[9]).toBe("keyword-9");
+  });
+
+  it("accepts a keywords array of exactly 10", () => {
+    const kws = Array.from({ length: 10 }, (_, i) => `kw${i}`);
+    const result = parseAeoMetadata({ keywords: kws });
+    expect(result?.keywords?.length).toBe(10);
   });
 
   it("ignores unknown extra fields without failing", () => {

@@ -106,6 +106,76 @@ function AeoBadge({ aeo }: { aeo: AeoMetadata }) {
   );
 }
 
+// ── AEO Health panel ──────────────────────────────────────────────────────────
+
+const AEO_HEALTH_CRITERIA: { key: string; label: string; pts: number; tip: string }[] = [
+  { key: "summary",        label: "Summary written",     pts: 20, tip: "Add a 2–3 sentence summary for AI crawlers." },
+  { key: "summary-length", label: "Summary 50+ chars",   pts: 10, tip: "Expand your summary to at least 50 characters." },
+  { key: "qa-1",           label: "At least 1 Q&A pair", pts: 20, tip: "Add a Q&A pair to generate FAQPage schema." },
+  { key: "qa-3",           label: "3 or more Q&A pairs", pts: 10, tip: "Add at least 3 Q&A pairs for better coverage." },
+  { key: "entities",       label: "Named entity tagged",  pts: 20, tip: "Tag key people, orgs, products, or concepts." },
+  { key: "keywords",       label: "5+ keywords",         pts: 20, tip: "Add 5–10 search-focused keywords." },
+];
+
+function calcAeoHealth(aeo: AeoMetadata) {
+  const summary   = aeo.summary?.trim() ?? "";
+  const questions = (aeo.questions ?? []).filter(q => q.q && q.a);
+  const entities  = (aeo.entities  ?? []).filter(e => e.name);
+  const keywords  = (aeo.keywords  ?? []).filter(k => k.trim());
+
+  const passed: Record<string, boolean> = {
+    "summary":        summary.length > 0,
+    "summary-length": summary.length >= 50,
+    "qa-1":           questions.length >= 1,
+    "qa-3":           questions.length >= 3,
+    "entities":       entities.length >= 1,
+    "keywords":       keywords.length >= 5,
+  };
+
+  const items = AEO_HEALTH_CRITERIA.map(c => ({ ...c, pass: passed[c.key] }));
+  const score = items.reduce((s, i) => s + (i.pass ? i.pts : 0), 0);
+  return { score, items };
+}
+
+function AeoHealthPanel({ aeo }: { aeo: AeoMetadata }) {
+  const { score, items } = calcAeoHealth(aeo);
+  const grade    = score >= 90 ? "Excellent" : score >= 70 ? "Good" : score >= 40 ? "Fair" : "Poor";
+  const barCls   = score >= 90 ? "bg-green-500" : score >= 70 ? "bg-blue-500" : score >= 40 ? "bg-amber-400" : "bg-red-400";
+  const scoreCls = score >= 90 ? "text-green-600" : score >= 70 ? "text-blue-600" : score >= 40 ? "text-amber-500" : "text-red-500";
+
+  return (
+    <div className="bg-white border border-zinc-200 rounded-lg p-4">
+      <p className="text-xs font-semibold tracking-widest text-zinc-500 uppercase mb-3">AEO Health</p>
+      <div className="flex items-baseline gap-1.5 mb-2">
+        <span className={`text-3xl font-bold leading-none ${scoreCls}`}>{score}</span>
+        <span className="text-sm text-zinc-300">/100</span>
+        <span className={`text-xs font-semibold ml-auto ${scoreCls}`}>{grade}</span>
+      </div>
+      <div className="w-full h-1.5 bg-zinc-100 rounded-full overflow-hidden mb-4">
+        <div className={`h-full rounded-full transition-all duration-500 ${barCls}`} style={{ width: `${score}%` }} />
+      </div>
+      <ul className="space-y-2.5">
+        {items.map(item => (
+          <li key={item.key} className="flex items-start gap-2">
+            <span className={`mt-px text-xs font-bold shrink-0 ${item.pass ? "text-green-500" : "text-zinc-300"}`}>
+              {item.pass ? "✓" : "○"}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-1">
+                <span className={`text-xs ${item.pass ? "text-zinc-700" : "text-zinc-400"}`}>{item.label}</span>
+                <span className={`text-[10px] shrink-0 ${item.pass ? "text-green-500" : "text-zinc-300"}`}>+{item.pts}</span>
+              </div>
+              {!item.pass && (
+                <p className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">{item.tip}</p>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 const ACTION_LABELS: Record<string, string> = {
   "internal-links": "Internal Link Suggestions",
   "topic-report": "Topic Focus Report",
@@ -198,7 +268,7 @@ export default function PostForm({
   const [toneItems, setToneItems] = useState<Array<{ quote: string; issue: string; suggestion: string }> | null>(null);
   const [catSuggestions, setCatSuggestions] = useState<string[] | null>(null);
   const [tagSuggestions, setTagSuggestions] = useState<string[] | null>(null);
-  const [moreAiPending, setMoreAiPending] = useState(false);
+  const [moreAiPending, setMoreAiPending] = useState<string | null>(null);
   const [moreAiResults, setMoreAiResults] = useState<Record<string, string>>({});
   const [runAllPending, setRunAllPending] = useState<Set<string>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -389,9 +459,9 @@ export default function PostForm({
   }
 
   async function runMoreAi(type: string) {
-    setMoreAiPending(true);
+    setMoreAiPending(type);
     const result = await callAi(type);
-    setMoreAiPending(false);
+    setMoreAiPending(null);
     if (result) setMoreAiResults(prev => ({ ...prev, [type]: result }));
   }
 
@@ -571,13 +641,12 @@ export default function PostForm({
   }
 
   function RunBtn({ tool, label }: { tool: string; label: string }) {
-    const running = runAllPending.has(tool) || (moreAiPending && !runAllPending.size);
+    const isSpinning = runAllPending.has(tool) || moreAiPending === tool;
     const done = !!moreAiResults[tool];
-    const isSpinning = runAllPending.has(tool);
     return (
       <button
         type="button"
-        disabled={moreAiPending || runAllPending.size > 0}
+        disabled={!!moreAiPending || runAllPending.size > 0}
         onClick={() => runMoreAi(tool)}
         className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition-all disabled:cursor-not-allowed
           ${isSpinning
@@ -599,7 +668,7 @@ export default function PostForm({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         )}
-        {running && !isSpinning ? "Running…" : label}
+        {isSpinning ? "Running…" : label}
       </button>
     );
   }
@@ -654,6 +723,12 @@ export default function PostForm({
 
       <form id="post-form" action={action} onSubmit={() => setIsDirty(false)} className="space-y-4">
         <input ref={intentRef} type="hidden" name="intent" defaultValue="publish" />
+
+        {/* Two-column layout: left (type + title + content) | right (AEO health + images) */}
+        <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+
+        {/* Left column */}
+        <div className="flex-1 min-w-0 lg:flex-[4] space-y-4">
 
         {/* Content type — compact bar */}
         <div className="bg-white border border-zinc-200 rounded-lg px-4 py-3">
@@ -793,10 +868,8 @@ export default function PostForm({
           )}
         </div>
 
-        {/* Content + Image Panel — flex row on desktop, stacked on mobile */}
-        <div className="flex flex-col lg:flex-row lg:items-start gap-4">
-          {/* Editor card — 80% */}
-          <div id="content-editor-card" className="bg-white border border-zinc-200 rounded-lg p-6 min-w-0 lg:flex-[4]">
+        {/* Content editor */}
+        <div id="content-editor-card" className="bg-white border border-zinc-200 rounded-lg p-6">
               <div className="flex items-center justify-between mb-3">
                 <SectionLabel>Content</SectionLabel>
                 {aiEnabled && (
@@ -858,10 +931,16 @@ export default function PostForm({
                 postTitle={title}
                 onMediaUploaded={handleMediaUploaded}
               />
-          </div>
+        </div>{/* end content editor */}
+        </div>{/* end left column */}
 
-          {/* Image panel card — 20%, sticky on desktop */}
-          <div className="bg-white border border-zinc-200 rounded-lg p-3 lg:flex-[1] lg:sticky lg:top-[52px] lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto flex flex-col gap-3">
+        {/* Right column — AEO health + images, sticky on desktop */}
+        <div className="shrink-0 lg:flex-[1] lg:sticky lg:top-[52px] lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto space-y-4">
+
+        <AeoHealthPanel aeo={aeoMeta} />
+
+        {/* Image panel card */}
+        <div className="bg-white border border-zinc-200 rounded-lg p-3 flex flex-col gap-3">
             <p className="text-xs font-semibold tracking-widest text-zinc-700 uppercase shrink-0">Images</p>
             {featuredId !== null && (
               <>
@@ -901,8 +980,9 @@ export default function PostForm({
               onUpload={handleMediaUploaded}
               postTitle={title}
             />
-          </div>
-        </div>
+        </div>{/* end image panel card */}
+        </div>{/* end right column */}
+        </div>{/* end two-column layout */}
 
         {/* Excerpt */}
         <div className="bg-white border border-zinc-200 rounded-lg p-6">
@@ -1028,29 +1108,7 @@ export default function PostForm({
           <>
             {/* Section divider label */}
             <div className="pt-2 pb-1">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold tracking-widest text-zinc-700 uppercase">AI Analysis</p>
-                <button
-                  type="button"
-                  disabled={runAllPending.size > 0}
-                  onClick={handleRunAll}
-                  className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition-all disabled:cursor-not-allowed ${
-                    runAllPending.size > 0
-                      ? "bg-violet-600 border-violet-600 text-white"
-                      : "bg-violet-50 border-violet-200 text-violet-600 hover:bg-violet-100 hover:border-violet-300 disabled:opacity-40"
-                  }`}
-                >
-                  {runAllPending.size > 0 ? (
-                    <>
-                      <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                      </svg>
-                      {runAllPending.size} running…
-                    </>
-                  ) : "Run all"}
-                </button>
-              </div>
+              <p className="text-xs font-semibold tracking-widest text-zinc-700 uppercase">AI Analysis</p>
             </div>
 
             {/* Topic Focus */}
