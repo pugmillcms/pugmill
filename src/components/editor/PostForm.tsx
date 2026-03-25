@@ -796,7 +796,7 @@ export default function PostForm({
         {/* Content + Image Panel — flex row on desktop, stacked on mobile */}
         <div className="flex flex-col lg:flex-row lg:items-start gap-4">
           {/* Editor card — 80% */}
-          <div className="bg-white border border-zinc-200 rounded-lg p-6 min-w-0 lg:flex-[4]">
+          <div id="content-editor-card" className="bg-white border border-zinc-200 rounded-lg p-6 min-w-0 lg:flex-[4]">
               <div className="flex items-center justify-between mb-3">
                 <SectionLabel>Content</SectionLabel>
                 {aiEnabled && (
@@ -1090,7 +1090,16 @@ export default function PostForm({
                               type="button"
                               onClick={() => {
                                 const found = editorRef.current?.scrollToText(issue.passage!);
-                                if (!found) navigator.clipboard.writeText(issue.passage!);
+                                if (!found) {
+                                  navigator.clipboard.writeText(issue.passage!);
+                                  return;
+                                }
+                                // Scroll to top of content card, offset for sticky header (56px) + gap
+                                const card = document.getElementById("content-editor-card");
+                                if (card) {
+                                  const y = card.getBoundingClientRect().top + window.scrollY - 72;
+                                  window.scrollTo({ top: y, behavior: "smooth" });
+                                }
                               }}
                               className="text-xs text-violet-500 hover:text-violet-700 font-medium shrink-0 transition-colors"
                               title="Find in editor"

@@ -90,6 +90,7 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function Markdown
   const [mode, setMode] = useState<"visual" | "raw">("visual");
   const [markdown, setMarkdown] = useState(defaultValue);
   const editorIsSource = useRef(false);
+  const rawTextareaRef = useRef<HTMLTextAreaElement>(null);
   // Keep a stable ref to onContentChange so the Tiptap onUpdate closure never goes stale.
   const onContentChangeRef = useRef(onContentChange);
   onContentChangeRef.current = onContentChange;
@@ -179,7 +180,19 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function Markdown
       editor.chain().focus().setImage({ src: url, alt }).run();
     },
     scrollToText(text: string): boolean {
-      if (!editor || !text) return false;
+      if (!text) return false;
+      // Raw (textarea) mode
+      if (mode === "raw") {
+        const ta = rawTextareaRef.current;
+        if (!ta) return false;
+        const idx = markdown.indexOf(text);
+        if (idx === -1) return false;
+        ta.focus();
+        ta.setSelectionRange(idx, idx + text.length);
+        return true;
+      }
+      // Visual (Tiptap) mode
+      if (!editor) return false;
       let found = false;
       editor.state.doc.descendants((node, pos) => {
         if (found || !node.isText || !node.text) return;
@@ -190,10 +203,6 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function Markdown
         editor.chain().focus().setTextSelection({ from, to }).run();
         found = true;
       });
-      if (found) {
-        // Scroll the page so the editor is visible at the top of the viewport
-        editor.view.dom.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
       return found;
     },
   }));
@@ -390,6 +399,7 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function Markdown
           </div>
         ) : (
           <textarea
+            ref={rawTextareaRef}
             value={markdown}
             onChange={e => handleRawChange(e.target.value)}
             placeholder={placeholder ?? "Write in Markdown..."}
