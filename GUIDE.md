@@ -40,7 +40,7 @@ This guide contains the build sequence and agent prompts for constructing Pugmil
 ## Sprint 4: Plugin System
 **Goal:** Enable modularity using the Hook System.
 
-> "Build a plugin loader in `src/lib/plugin-loader.ts` that initializes plugins listed in `config.modules.activePlugins`. Each plugin exports a `PugmillPlugin` object with an `initialize(hooks, settings)` method. Create a bundled SEO plugin in `/plugins/seo-optimizer/` that injects meta tags via the `theme_head_tags` filter. Add a Plugins admin page at `/admin/settings/plugins` with enable/disable toggles and per-plugin settings forms. See `HOOKS.md` for all available hooks."
+> "Build a plugin loader in `src/lib/plugin-loader.ts` that initializes plugins listed in `config.modules.activePlugins`. Each plugin exports a `PugmillPlugin` object with an `initialize(hooks, settings)` method. Add a Plugins admin page at `/admin/plugins` with enable/disable toggles and per-plugin settings forms. SEO metadata and structured data are handled in core — not a plugin. Use the `head:meta` filter to inject additional `<meta>` tags from a plugin. See `HOOKS.md` for all available hooks."
 
 ---
 
