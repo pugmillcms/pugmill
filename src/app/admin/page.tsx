@@ -147,7 +147,7 @@ export default async function AdminDashboard() {
       label: "Configure an AI provider",
       description: "Connect Anthropic, OpenAI, or Gemini to unlock AI-powered features.",
       done: config.ai.provider !== null,
-      href: "/admin/settings#ai",
+      href: "/admin/settings/ai",
     },
     {
       label: "Set your author voice",
