@@ -34,7 +34,16 @@ function getKey(): Buffer | null {
 export function encryptString(plain: string): string {
   const key = getKey();
   if (!key) {
-    console.warn("[Pugmill] AI_ENCRYPTION_KEY not set — storing API key as plaintext.");
+    // In production, refuse to persist a secret in plaintext — fail closed so a
+    // missing/invalid AI_ENCRYPTION_KEY is a loud configuration error rather than
+    // a silent at-rest exposure. Local dev keeps the plaintext convenience path.
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "AI_ENCRYPTION_KEY is not set (or not a 64-char hex string). It is required to store secrets. " +
+        "Generate one with: openssl rand -hex 32",
+      );
+    }
+    console.warn("[Pugmill] AI_ENCRYPTION_KEY not set — storing secret as plaintext (dev only).");
     return plain;
   }
 

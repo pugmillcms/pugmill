@@ -367,7 +367,16 @@ export async function bulkSaveAeo(
   aeoMetadata: Record<string, unknown>,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    await requireAdminOrEditor();
+    const user = await requireAdminOrEditor();
+
+    // Editors may only touch their own posts — same rule as update/delete.
+    if (user.role === "editor") {
+      const existing = await db.select({ authorId: posts.authorId }).from(posts).where(eq(posts.id, postId));
+      if (!existing[0] || existing[0].authorId !== user.id) {
+        return { ok: false, error: "Unauthorized: editors can only edit their own posts" };
+      }
+    }
+
     await db
       .update(posts)
       .set({ aeoMetadata, updatedAt: new Date() } as Partial<typeof posts.$inferInsert>)

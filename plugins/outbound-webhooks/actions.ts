@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { getCurrentUser } from "../../src/lib/get-current-user";
 import { loadPlugins } from "../../src/lib/plugin-loader";
 import { encryptString } from "../../src/lib/encrypt";
+import { assertPublicHttpUrl } from "../../src/lib/ssrf";
 import { z } from "zod";
 
 // Auth check only — no loadPlugins() here per §12 of PLUGIN_AUTHORING.md.
@@ -36,6 +37,13 @@ export async function createEndpoint(formData: FormData): Promise<{ ok: boolean;
   });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.errors[0].message };
+  }
+
+  // SSRF guard: reject endpoints that resolve to internal/reserved addresses.
+  try {
+    await assertPublicHttpUrl(parsed.data.url.trim());
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "URL is not allowed" };
   }
 
   const secret = parsed.data.secret ? encryptString(parsed.data.secret) : "";

@@ -28,6 +28,8 @@ function slugify(title: string): string {
 export interface McpTool {
   definition: McpToolDefinition;
   handler: (params: unknown) => Promise<McpToolResult>;
+  /** True for content-mutating tools — requires an API key with "readwrite" scope. */
+  write?: boolean;
 }
 
 // ─── Tool definitions ─────────────────────────────────────────────────────────
@@ -170,6 +172,7 @@ const getPostTool: McpTool = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const createPostTool: McpTool = {
+  write: true,
   definition: {
     name: "create_post",
     description: "Create a new draft post. Returns the new post id and slug.",
@@ -250,6 +253,7 @@ const createPostTool: McpTool = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const updatePostTool: McpTool = {
+  write: true,
   definition: {
     name: "update_post",
     description: "Update an existing post by slug. Only provided fields are updated.",
@@ -314,6 +318,7 @@ const updatePostTool: McpTool = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const publishPostTool: McpTool = {
+  write: true,
   definition: {
     name: "publish_post",
     description: "Publish a draft post by slug. Sets status to published and records publishedAt if not already set.",
@@ -365,6 +370,7 @@ const publishPostTool: McpTool = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const unpublishPostTool: McpTool = {
+  write: true,
   definition: {
     name: "unpublish_post",
     description: "Revert a published post back to draft status.",

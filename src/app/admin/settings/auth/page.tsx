@@ -119,6 +119,39 @@ export default async function AuthSettingsPage({
           </div>
         </div>
 
+        {/* Self-provisioning allowlist */}
+        <div className="bg-white border border-zinc-200 rounded-lg p-6 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-zinc-700">Who may sign up via OAuth</h3>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              By default, signing in with Google or GitHub does <strong className="text-zinc-600">not</strong> create
+              an account — that would let anyone on the internet self-register. List the emails or domains allowed to
+              be provisioned (as editors) on first sign-in. Existing users always sign in regardless of this list.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Allowed emails</label>
+            <textarea
+              name="oauthAllowedEmails"
+              rows={2}
+              defaultValue={(authCfg?.oauthAllowedEmails ?? []).join("\n")}
+              placeholder="alice@example.com, bob@example.com"
+              className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-400"
+            />
+            <p className="text-[11px] text-zinc-400 mt-1">Comma- or newline-separated.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Allowed domains</label>
+            <input
+              name="oauthAllowedDomains"
+              defaultValue={(authCfg?.oauthAllowedDomains ?? []).join(", ")}
+              placeholder="example.com"
+              className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-400"
+            />
+            <p className="text-[11px] text-zinc-400 mt-1">Any email at these domains may self-provision. Use with care.</p>
+          </div>
+        </div>
+
         <div className="bg-zinc-50 border border-zinc-200 rounded-lg px-4 py-3 text-xs text-zinc-500 space-y-1">
           <p>
             <strong className="text-zinc-700">How it works:</strong> Credentials saved here are encrypted and stored in the database.
@@ -130,7 +163,7 @@ export default async function AuthSettingsPage({
             <strong className="text-zinc-600">Other platforms:</strong> Set <code className="bg-zinc-100 px-1 rounded">GITHUB_CLIENT_ID</code>, <code className="bg-zinc-100 px-1 rounded">GITHUB_CLIENT_SECRET</code>, <code className="bg-zinc-100 px-1 rounded">GOOGLE_CLIENT_ID</code>, and <code className="bg-zinc-100 px-1 rounded">GOOGLE_CLIENT_SECRET</code> as environment variables in your host&apos;s secrets panel. Values saved here are ignored on these platforms.
           </p>
           <p>
-            The first OAuth user to sign in becomes an admin. Subsequent OAuth sign-ins are provisioned as editors and can be promoted in <a href="/admin/users" className="underline text-zinc-600">Users</a>.
+            On a brand-new install the first account to sign in becomes the admin (bootstrap). After that, only emails/domains in the allowlist above can self-provision (as editors, promotable in <a href="/admin/users" className="underline text-zinc-600">Users</a>); everyone else is turned away.
           </p>
         </div>
 

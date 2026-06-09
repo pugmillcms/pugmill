@@ -7,6 +7,7 @@ interface Key {
   id: number;
   name: string;
   keyPrefix: string;
+  scope: string;
   lastUsedAt: Date | null;
   revokedAt: Date | null;
   createdAt: Date;
@@ -56,6 +57,17 @@ export function CreateKeyForm() {
             className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400"
           />
         </div>
+        <div className="w-44">
+          <label className="block text-sm font-medium text-zinc-700 mb-1">Scope</label>
+          <select
+            name="scope"
+            defaultValue="read"
+            className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-400"
+          >
+            <option value="read">Read-only</option>
+            <option value="readwrite">Read &amp; write</option>
+          </select>
+        </div>
         <button
           type="submit"
           disabled={pending}
@@ -64,6 +76,10 @@ export function CreateKeyForm() {
           {pending ? "Creating…" : "Create key"}
         </button>
       </form>
+      <p className="text-xs text-zinc-400 -mt-1">
+        Read-only keys can read content via the REST API and MCP. Read &amp; write keys can also
+        create, edit, and publish content through the MCP server — only grant this to agents you trust.
+      </p>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
 

@@ -16,21 +16,23 @@ async function requireAdmin() {
 
 const createSchema = z.object({
   name: z.string().min(1).max(100),
+  scope: z.enum(["read", "readwrite"]).default("read"),
 });
 
 /**
  * createApiKey
  *
  * Generates a new API token. Returns the full token ONCE — it is never stored.
- * On success: { token, prefix, id }
- * On error:   { error }
+ * Scope defaults to "read"; "readwrite" additionally unlocks content-mutating
+ * MCP tools. On success: { token, prefix, id }. On error: { error }.
  */
 export async function createApiKey(formData: FormData): Promise<
   { token: string; prefix: string; id: number } | { error: string }
 > {
   const user = await requireAdmin();
 
-  const parsed = createSchema.safeParse({ name: formData.get("name") });
+  const rawScope = (formData.get("scope") as string) || "read";
+  const parsed = createSchema.safeParse({ name: formData.get("name"), scope: rawScope });
   if (!parsed.success) return { error: "Name is required (max 100 chars)." };
 
   const { token, hash, prefix } = generateApiToken();
@@ -41,11 +43,17 @@ export async function createApiKey(formData: FormData): Promise<
       name: parsed.data.name.trim(),
       keyPrefix: prefix,
       keyHash: hash,
+      scope: parsed.data.scope,
       createdBy: user.id,
     } as typeof apiKeys.$inferInsert)
     .returning({ id: apiKeys.id });
 
-  auditLog({ action: "api_key.create", userId: user.id, resourceId: row.id, detail: parsed.data.name });
+  auditLog({
+    action: "api_key.create",
+    userId: user.id,
+    resourceId: row.id,
+    detail: `${parsed.data.name} (${parsed.data.scope})`,
+  });
   revalidatePath("/admin/settings/api-keys");
   return { token, prefix, id: row.id };
 }
@@ -63,6 +71,7 @@ export async function listApiKeys() {
       id: apiKeys.id,
       name: apiKeys.name,
       keyPrefix: apiKeys.keyPrefix,
+      scope: apiKeys.scope,
       lastUsedAt: apiKeys.lastUsedAt,
       revokedAt: apiKeys.revokedAt,
       createdAt: apiKeys.createdAt,

@@ -46,6 +46,16 @@ export default function SubscribeForm({ label, description }: Props) {
         </p>
       )}
       <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2 max-w-md">
+        {/* Honeypot — hidden from humans, tempting to bots. */}
+        <input
+          type="text"
+          name="_hp"
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+          className="hidden"
+          style={{ display: "none" }}
+        />
         <input
           name="email"
           type="email"

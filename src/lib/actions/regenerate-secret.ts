@@ -3,12 +3,44 @@
 import crypto from "crypto";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
+import { headers } from "next/headers";
+import { db } from "@/lib/db";
+import { adminUsers } from "@/lib/db/schema";
+import { createRateLimiter } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/get-client-ip";
+
+// Per-IP throttle so the unauthenticated setup window can't be hammered.
+const regenLimiter = createRateLimiter({ interval: 15 * 60 * 1000, uniqueTokenPerInterval: 200 });
+
+async function adminExists(): Promise<boolean> {
+  const rows = await db.select({ id: adminUsers.id }).from(adminUsers).limit(1);
+  return rows.length > 0;
+}
 
 /**
  * Generate a new NEXTAUTH_SECRET, write it to .env.local, and return it.
- * Safe to call only during first-run setup — before any user sessions exist.
+ *
+ * SETUP ONLY — and the gate below enforces that, it is no longer a comment you
+ * can trust. This action is unauthenticated (the setup wizard runs before any
+ * account exists) and it returns the freshly generated secret to the caller.
+ * Every exported "use server" function is a callable POST endpoint whose id is
+ * baked into the public client bundle, so without this gate anyone on the
+ * internet could call it to (a) learn the live signing key and forge admin
+ * JWTs, or (b) repeatedly rotate it and invalidate all sessions. The DB is the
+ * gate: the moment an admin account exists, this refuses.
  */
 export async function regenerateSecret(): Promise<{ secret: string }> {
+  // Hard gate: once the instance has an admin, secret rotation via this
+  // unauthenticated path is permanently closed.
+  if (await adminExists()) {
+    throw new Error("Setup is already complete — secret regeneration is disabled.");
+  }
+
+  const ip = getClientIp(await headers());
+  if (!regenLimiter.check(`regen:${ip}`, 10).success) {
+    throw new Error("Too many requests. Please wait a few minutes and try again.");
+  }
+
   const secret = crypto.randomBytes(32).toString("base64");
 
   const ENV_LOCAL = path.join(process.cwd(), ".env.local");

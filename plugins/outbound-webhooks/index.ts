@@ -49,6 +49,11 @@ async function dispatch(
   let error: string | undefined;
 
   try {
+    // Re-validate at dispatch time: the URL passed the SSRF check when saved,
+    // but DNS can change. Block anything that now resolves to a private host.
+    const { assertPublicHttpUrl } = await import("../../src/lib/ssrf");
+    await assertPublicHttpUrl(endpoint.url);
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
 

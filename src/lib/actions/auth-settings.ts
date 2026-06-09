@@ -31,9 +31,31 @@ export async function saveAuthSettings(formData: FormData) {
     ? encryptString(rawGithubSecret)
     : (current.auth?.githubClientSecret ?? "");
 
+  // OAuth self-provisioning allowlist. Split on commas/newlines, trim, dedupe.
+  const parseList = (raw: string): string[] =>
+    Array.from(
+      new Set(
+        raw
+          .split(/[\s,]+/)
+          .map((s) => s.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    );
+  const oauthAllowedEmails = parseList((formData.get("oauthAllowedEmails") as string) ?? "")
+    .filter((s) => s.includes("@"));
+  const oauthAllowedDomains = parseList((formData.get("oauthAllowedDomains") as string) ?? "")
+    .map((s) => s.replace(/^@/, ""));
+
   await updateConfig({
     ...current,
-    auth: { googleClientId, googleClientSecret, githubClientId, githubClientSecret },
+    auth: {
+      googleClientId,
+      googleClientSecret,
+      githubClientId,
+      githubClientSecret,
+      oauthAllowedEmails,
+      oauthAllowedDomains,
+    },
   });
 
   auditLog({ action: "settings.update", userId: user.id, detail: "oauth providers" });

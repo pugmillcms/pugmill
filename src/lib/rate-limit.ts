@@ -2,6 +2,7 @@ import { LRUCache } from "lru-cache";
 import { db } from "@/lib/db";
 import { aiUsage } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { getClientIp } from "@/lib/get-client-ip";
 
 type Options = {
   uniqueTokenPerInterval?: number;
@@ -141,10 +142,11 @@ const API_RATE_LIMIT = 60;
  *   if (limited) return limited;
  */
 export function checkApiRateLimit(req: { headers: { get(name: string): string | null } }): Response | null {
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
-    req.headers.get("x-real-ip") ??
-    "unknown";
+  // Use the shared helper (prefers x-real-ip, set by the proxy) so every
+  // rate-limited surface derives the client IP the same way. Note: where no
+  // trusted proxy sits in front, x-forwarded-for is still client-spoofable —
+  // the per-account/email limits are the real backstop there.
+  const ip = getClientIp(req.headers);
 
   const { success, remaining } = apiLimiter.check(ip, API_RATE_LIMIT);
 

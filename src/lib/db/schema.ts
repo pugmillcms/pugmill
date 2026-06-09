@@ -238,6 +238,12 @@ export const apiKeys = pgTable("api_keys", {
   keyPrefix: varchar("key_prefix", { length: 16 }).notNull(),
   /** SHA-256 hex digest of the full token. Used for constant-time validation. */
   keyHash: text("key_hash").notNull().unique(),
+  /**
+   * Permission scope: "read" (REST API + read-only MCP tools) or "readwrite"
+   * (also allows content-mutating MCP tools — create/update/publish). Defaults
+   * to "read" so a key never grants write access unless explicitly chosen.
+   */
+  scope: text("scope").notNull().default("read"),
   createdBy: text("created_by").references(() => adminUsers.id, { onDelete: "set null" }),
   lastUsedAt: timestamp("last_used_at"),
   revokedAt: timestamp("revoked_at"),

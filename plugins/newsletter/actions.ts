@@ -10,6 +10,9 @@ import { posts } from "../../src/lib/db/schema";
 import { z } from "zod";
 import crypto from "crypto";
 import { auditLog } from "../../src/lib/audit-log";
+import { headers } from "next/headers";
+import { getClientIp } from "../../src/lib/get-client-ip";
+import { submissionLimiter, SUBMISSION_RATE_LIMIT } from "../../src/lib/rate-limit";
 
 // ─── Auth helper ───────────────────────────────────────────────────────────────
 
@@ -30,6 +33,18 @@ export async function subscribeNewsletter(
   formData: FormData
 ): Promise<{ ok: boolean; error?: string; alreadySubscribed?: boolean }> {
   await loadPlugins();
+
+  // Honeypot — a hidden field real users never fill. Report success so a bot
+  // that auto-fills every input learns nothing.
+  if (((formData.get("_hp") as string) ?? "").length > 0) {
+    return { ok: true };
+  }
+
+  // Rate limit by IP — max 5 submissions per 10 minutes (shared limiter).
+  const ip = getClientIp(await headers());
+  if (!submissionLimiter.check(`newsletter:${ip}`, SUBMISSION_RATE_LIMIT).success) {
+    return { ok: false, error: "Too many requests. Please try again in a little while." };
+  }
 
   const parsed = subscribeSchema.safeParse({
     email: formData.get("email"),

@@ -112,7 +112,19 @@ export const configSchema = z.object({
     githubClientId: z.string().default(""),
     /** GitHub OAuth client secret — stored encrypted. */
     githubClientSecret: z.string().default(""),
-  }).default({ googleClientId: "", googleClientSecret: "", githubClientId: "", githubClientSecret: "" }),
+    /**
+     * Emails permitted to self-provision via OAuth. A new GitHub/Google identity
+     * is created as an editor ONLY if its email is listed here (or its domain is
+     * in oauthAllowedDomains). The first account on an empty install is always
+     * allowed (bootstrap). Empty = no new OAuth users (existing users still log in).
+     */
+    oauthAllowedEmails: z.array(z.string()).default([]),
+    /** Domains (e.g. "example.com") whose emails may self-provision via OAuth. */
+    oauthAllowedDomains: z.array(z.string()).default([]),
+  }).default({
+    googleClientId: "", googleClientSecret: "", githubClientId: "", githubClientSecret: "",
+    oauthAllowedEmails: [], oauthAllowedDomains: [],
+  }),
   network: z.object({
     /** Whether this site participates in the AEO Intelligence Network. Off by default. */
     participateInNetwork: z.boolean().default(false),
@@ -194,7 +206,10 @@ const DEFAULT_CONFIG: Config = {
     participateInNetwork: false,
     networkToken: "",
   },
-  auth: { googleClientId: "", googleClientSecret: "", githubClientId: "", githubClientSecret: "" },
+  auth: {
+    googleClientId: "", googleClientSecret: "", githubClientId: "", githubClientSecret: "",
+    oauthAllowedEmails: [], oauthAllowedDomains: [],
+  },
   email: {
     provider: null,
     fromName: "", fromAddress: "", toAddress: "",

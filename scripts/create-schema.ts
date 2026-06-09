@@ -229,6 +229,7 @@ export async function createSchema() {
       "name"         TEXT         NOT NULL,
       "key_prefix"   VARCHAR(16)  NOT NULL,
       "key_hash"     TEXT         NOT NULL UNIQUE,
+      "scope"        TEXT         NOT NULL DEFAULT 'read',
       "created_by"   TEXT         REFERENCES "admin_users"("id") ON DELETE SET NULL,
       "last_used_at" TIMESTAMP,
       "revoked_at"   TIMESTAMP,

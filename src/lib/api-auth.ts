@@ -3,14 +3,17 @@ import { db } from "@/lib/db";
 import { apiKeys } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { createRateLimiter } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/get-client-ip";
 
 // Authenticated API requests get 10× the public limit.
 const AUTHED_RATE_LIMIT = 600; // req/min
 const authedLimiter = createRateLimiter({ interval: 60_000, uniqueTokenPerInterval: 500 });
 
+export type ApiScope = "read" | "readwrite";
+
 export type ApiAuthResult =
   | { ok: true; authenticated: false }
-  | { ok: true; authenticated: true; keyId: number }
+  | { ok: true; authenticated: true; keyId: number; scope: ApiScope }
   | { ok: false; response: Response };
 
 /**
@@ -31,11 +34,9 @@ export async function authorizeApiRequest(req: Request): Promise<ApiAuthResult> 
   const authHeader = req.headers.get("authorization");
 
   if (!authHeader) {
-    // No key — apply public IP rate limit (60/min)
-    const ip =
-      req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
-      req.headers.get("x-real-ip") ??
-      "unknown";
+    // No key — apply public IP rate limit (60/min). Shared helper, same
+    // derivation as every other rate-limited surface.
+    const ip = getClientIp(req.headers);
 
     const PUBLIC_LIMIT = 60;
     const { success } = authedLimiter.check(`ip:${ip}`, PUBLIC_LIMIT);
@@ -96,7 +97,8 @@ export async function authorizeApiRequest(req: Request): Promise<ApiAuthResult> 
   db.execute(sql`UPDATE api_keys SET last_used_at = NOW() WHERE id = ${row.id}`)
     .catch(() => { /* non-critical */ });
 
-  return { ok: true, authenticated: true, keyId: row.id };
+  const scope: ApiScope = row.scope === "readwrite" ? "readwrite" : "read";
+  return { ok: true, authenticated: true, keyId: row.id, scope };
 }
 
 /**

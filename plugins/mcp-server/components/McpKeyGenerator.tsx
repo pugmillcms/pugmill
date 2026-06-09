@@ -133,6 +133,7 @@ export default function McpKeyGenerator({ mcpUrl, lastUsedKey }: Props) {
   const [testState, setTestState]   = useState<TestState>({ phase: "idle" });
   const [keyName, setKeyName]       = useState(DEFAULT_KEY_NAME["desktop"]);
   const [nameError, setNameError]   = useState<string | null>(null);
+  const [writeAccess, setWriteAccess] = useState(true);
 
   const token = keyState.phase === "done" ? keyState.token : PLACEHOLDER;
   const isPlaceholder = keyState.phase !== "done";
@@ -151,6 +152,7 @@ export default function McpKeyGenerator({ mcpUrl, lastUsedKey }: Props) {
     setKeyState({ phase: "generating" });
     const fd = new FormData();
     fd.set("name", keyName.trim());
+    fd.set("scope", writeAccess ? "readwrite" : "read");
     const result = await createApiKey(fd);
     if ("error" in result) { setKeyState({ phase: "idle" }); setNameError(result.error); return; }
     setKeyState({ phase: "done", token: result.token, keyName: keyName.trim() });
@@ -366,6 +368,19 @@ export default function McpKeyGenerator({ mcpUrl, lastUsedKey }: Props) {
                     {keyState.phase === "generating" ? "Generating…" : "Generate key"}
                   </button>
                 </div>
+                <label className="flex items-start gap-2 mt-2 text-xs text-zinc-500 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={writeAccess}
+                    onChange={(e) => setWriteAccess(e.target.checked)}
+                    disabled={keyState.phase === "generating"}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Allow this agent to <strong className="text-zinc-600">create, edit, and publish</strong> content
+                    (read &amp; write). Uncheck for a read-only key that can browse content but never change it.
+                  </span>
+                </label>
               </div>
             </div>
           )}

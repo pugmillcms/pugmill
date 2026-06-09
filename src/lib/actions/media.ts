@@ -10,13 +10,17 @@ import { loadPlugins } from "@/lib/plugin-loader";
 import { auditLog } from "@/lib/audit-log";
 import { getStorage } from "@/lib/storage";
 
+// SVG is intentionally excluded: an .svg can carry inline <script>/event
+// handlers, and files are served same-origin and inline from /uploads, so a
+// stored SVG is a stored-XSS payload. Raster/video formats only. (If SVG
+// support is ever needed, sanitize on upload AND serve it sandboxed.)
 const ALLOWED_MIME_TYPES = new Set([
-  "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml",
+  "image/jpeg", "image/png", "image/gif", "image/webp",
   "video/mp4", "video/webm", "video/ogg",
 ]);
 
 const ALLOWED_EXTENSIONS = new Set([
-  ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
+  ".jpg", ".jpeg", ".png", ".gif", ".webp",
   ".mp4", ".webm", ".ogv",
 ]);
 
@@ -25,14 +29,17 @@ const ALLOWED_EXTENSIONS = new Set([
 // 413 from infrastructure.
 const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4 MB (leaves headroom for FormData envelope)
 
-async function requireAdmin() {
+// Media is editable by any signed-in user (admin or editor), so this only
+// asserts authentication — not the admin role. Named accordingly to avoid the
+// false impression that it gates on admin.
+async function requireUser() {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   return user;
 }
 
 export async function uploadMedia(formData: FormData) {
-  const user = await requireAdmin();
+  const user = await requireUser();
   await loadPlugins();
 
   const file = formData.get("file") as File;
@@ -97,7 +104,7 @@ export async function uploadMedia(formData: FormData) {
 }
 
 export async function getImageMedia(): Promise<{ id: number; url: string; fileName: string }[]> {
-  await requireAdmin();
+  await requireUser();
   const rows = await db.select({ id: media.id, url: media.url, fileName: media.fileName })
     .from(media)
     .where(like(media.fileType, "image/%"))
@@ -106,7 +113,7 @@ export async function getImageMedia(): Promise<{ id: number; url: string; fileNa
 }
 
 export async function deleteMedia(id: number) {
-  const user = await requireAdmin();
+  const user = await requireUser();
   await loadPlugins();
 
   // Fetch the record so we can clean up the stored file
@@ -136,7 +143,7 @@ export async function deleteMedia(id: number) {
 
 export async function updateMediaAltText(id: number, altText: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    await requireAdmin();
+    await requireUser();
     await db.update(media).set({ altText: altText.trim() || null } as Partial<typeof media.$inferInsert>).where(eq(media.id, id));
     return { ok: true };
   } catch (err) {
@@ -145,7 +152,7 @@ export async function updateMediaAltText(id: number, altText: string): Promise<{
 }
 
 export async function cleanupUnusedMedia(): Promise<{ deleted: number }> {
-  const user = await requireAdmin();
+  const user = await requireUser();
 
   // Subquery: all media IDs currently used as a featured image
   const usedIds = db

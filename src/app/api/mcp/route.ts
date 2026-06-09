@@ -4,12 +4,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { authorizeApiRequest } from "@/lib/api-auth";
 import { getConfig } from "@/lib/config";
 import { loadPlugins } from "@/lib/plugin-loader";
+import type { ApiScope } from "@/lib/api-auth";
 import {
   rpcSuccess,
   rpcError,
   isNotification,
   extractId,
   RPC_PARSE_ERROR,
+  RPC_INVALID_PARAMS,
   RPC_METHOD_NOT_FOUND,
   RPC_INTERNAL_ERROR,
   type JsonRpcRequest,
@@ -47,7 +49,7 @@ export async function GET(_req: NextRequest) {
 
 // ─── Request dispatcher ───────────────────────────────────────────────────────
 
-async function dispatch(req: JsonRpcRequest): Promise<Response | null> {
+async function dispatch(req: JsonRpcRequest, scope: ApiScope): Promise<Response | null> {
   const id = req.id ?? null;
 
   // Notifications have no id and expect no response
@@ -88,6 +90,18 @@ async function dispatch(req: JsonRpcRequest): Promise<Response | null> {
         return NextResponse.json(
           rpcError(id, RPC_METHOD_NOT_FOUND, `Unknown tool: ${toolName}`),
           { status: 200 } // JSON-RPC errors still use HTTP 200
+        );
+      }
+
+      // Scope gate: content-mutating tools require a "readwrite" key.
+      if (tool.write && scope !== "readwrite") {
+        return NextResponse.json(
+          rpcError(
+            id,
+            RPC_INVALID_PARAMS,
+            `Tool "${toolName}" requires a read-write API key. This key is read-only.`,
+          ),
+          { status: 200 }
         );
       }
 
@@ -160,7 +174,7 @@ export async function POST(req: NextRequest) {
   }
 
   const rpcReq = body as JsonRpcRequest;
-  const response = await dispatch(rpcReq);
+  const response = await dispatch(rpcReq, auth.scope);
 
   // Notifications return null to signal 204 already sent, but dispatch returns the Response directly
   return response ?? new Response(null, { status: 204 });

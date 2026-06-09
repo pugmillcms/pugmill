@@ -68,6 +68,39 @@ const serverActionAllowedOrigins = [
   process.env.REPLIT_DEV_DOMAIN || null,
 ].filter((host): host is string => !!host);
 
+// ── Content Security Policy ─────────────────────────────────────────────────────
+// Pragmatic, app-wide policy. The high-value wins here are object-src 'none'
+// (no plugin/embeds), base-uri 'self' (no <base> hijack), frame-ancestors
+// (clickjacking) and form-action 'self' (no cross-origin form exfil).
+//
+// script-src keeps 'unsafe-inline' because Next's App Router emits inline
+// bootstrap scripts and we don't (yet) thread a per-request nonce. That means
+// this CSP is NOT a complete inline-XSS shield — a nonce-based policy via
+// middleware is the follow-up. 'unsafe-eval' / ws: are added in dev only
+// (React Refresh / HMR need them); production omits them.
+const isDev = process.env.NODE_ENV !== "production";
+
+const APP_CSP = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'self'",
+  "form-action 'self'",
+  "img-src 'self' data: blob: https:",
+  "media-src 'self' data: blob: https:",
+  "font-src 'self' data: https:",
+  "style-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  `connect-src 'self' https:${isDev ? " ws: wss:" : ""}`,
+].join("; ");
+
+// Strict, locked-down policy for user-uploaded files served from /uploads.
+// `sandbox` makes the browser treat a directly-navigated upload as a sandboxed
+// document with a unique origin and no script execution — so even a malicious
+// SVG/HTML upload can't run JS in the site's origin. Belt-and-suspenders with
+// the SVG upload block in src/lib/actions/media.ts.
+const UPLOADS_CSP = "default-src 'none'; sandbox; style-src 'unsafe-inline'; img-src 'self'";
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const nextConfig: NextConfig = {
@@ -112,6 +145,10 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [
           {
+            key: "Content-Security-Policy",
+            value: APP_CSP,
+          },
+          {
             key: "X-Frame-Options",
             value: "SAMEORIGIN",
           },
@@ -150,6 +187,22 @@ const nextConfig: NextConfig = {
           {
             key: "X-Frame-Options",
             value: "DENY",
+          },
+        ],
+      },
+      {
+        // User-uploaded files: sandbox so a malicious upload can't execute as a
+        // same-origin document. CSP on a sub-resource (e.g. <img>) is ignored by
+        // browsers, so embedding still works — this only bites direct navigation.
+        source: "/uploads/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: UPLOADS_CSP,
+          },
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
           },
         ],
       },
