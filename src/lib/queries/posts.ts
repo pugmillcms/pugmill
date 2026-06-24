@@ -8,8 +8,25 @@ import { db } from "@/lib/db";
 import { posts, postCategories, postTags, categories, tags, media } from "@/lib/db/schema";
 import { and, eq, inArray, desc, count, sql } from "drizzle-orm";
 import type { PostSummary } from "@/types";
+import { unstable_cache } from "next/cache";
 
 export const PAGE_SIZE = 10;
+
+/**
+ * Public-page cache window (seconds) — the one tunable knob for caching.
+ * Sensible 1-hour default, overridable via env, floored at 60s. Cache-hit
+ * reads are served from Next's Data Cache and never touch the database, so a
+ * scale-to-zero serverless Postgres (Neon, etc.) can sleep between edits.
+ * Invalidated immediately on save via revalidateTag("posts") in the post
+ * actions, so content changes appear at once rather than after the window.
+ */
+const POSTS_REVALIDATE = Math.max(60, Number(process.env.PUGMILL_REVALIDATE_SECONDS) || 3600);
+
+/** unstable_cache JSON-serializes its result, turning Date into an ISO string.
+ *  Re-hydrate publishedAt back to a Date so callers keep the PostSummary contract. */
+function rehydrateDate(p: PostSummary): PostSummary {
+  return { ...p, publishedAt: p.publishedAt ? new Date(p.publishedAt) : null };
+}
 
 interface FetchOptions {
   page?: number;
@@ -42,7 +59,7 @@ export interface PostPage {
  *
  * Supports optional filtering by category or tag slug.
  */
-export async function fetchPostPage({
+async function fetchPostPageUncached({
   page = 1,
   categorySlug,
   tagSlug,
@@ -136,7 +153,7 @@ export async function fetchPostPage({
  * Fetch the single featured post (published, type=post, featured=true).
  * Returns null if none is marked featured.
  */
-export async function fetchFeaturedPost(): Promise<PostSummary | null> {
+async function fetchFeaturedPostUncached(): Promise<PostSummary | null> {
   const rows = await db
     .select()
     .from(posts)
@@ -229,4 +246,32 @@ async function enrichPosts(rows: (typeof posts.$inferSelect)[]): Promise<PostSum
     categories: catsByPost.get(p.id) ?? [],
     tags: tagsByPost.get(p.id) ?? [],
   }));
+}
+
+// ─── Cached public API ────────────────────────────────────────────────────────
+// Public reads go through Next's Data Cache (tag "posts"), so repeat hits and
+// crawler traffic are served without touching the database — letting a
+// scale-to-zero Postgres sleep. Invalidated on save via revalidateTag("posts")
+// in actions/posts.ts, so edits appear immediately, not after the window.
+
+const _fetchPostPageCached = unstable_cache(
+  (opts: FetchOptions = {}) => fetchPostPageUncached(opts),
+  ["pugmill:fetchPostPage"],
+  { tags: ["posts"], revalidate: POSTS_REVALIDATE },
+);
+
+export async function fetchPostPage(opts: FetchOptions = {}): Promise<PostPage> {
+  const result = await _fetchPostPageCached(opts);
+  return { ...result, posts: result.posts.map(rehydrateDate) };
+}
+
+const _fetchFeaturedPostCached = unstable_cache(
+  () => fetchFeaturedPostUncached(),
+  ["pugmill:fetchFeaturedPost"],
+  { tags: ["posts"], revalidate: POSTS_REVALIDATE },
+);
+
+export async function fetchFeaturedPost(): Promise<PostSummary | null> {
+  const result = await _fetchFeaturedPostCached();
+  return result ? rehydrateDate(result) : null;
 }

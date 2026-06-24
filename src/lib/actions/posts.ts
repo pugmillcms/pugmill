@@ -1,5 +1,5 @@
 "use server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { posts, postCategories, postTags } from "@/lib/db/schema";
@@ -179,6 +179,7 @@ async function _createPost(formData: FormData) {
   }
   revalidatePath("/admin/posts");
   revalidatePath("/");
+  updateTag("posts");
 
   if (intent === "draft") {
     redirect(`/admin/posts/${newPost[0].id}/edit`);
@@ -297,6 +298,7 @@ async function _updatePost(id: number, formData: FormData) {
   }
   revalidatePath("/admin/posts");
   revalidatePath("/");
+  updateTag("posts");
 
   if (intent === "draft") {
     redirect(`/admin/posts/${id}/edit`);
@@ -394,6 +396,7 @@ export async function deletePost(id: number) {
   auditLog({ action: "post.delete", userId: user.id, resourceId: id });
   revalidatePath("/admin/posts");
   revalidatePath("/");
+  updateTag("posts");
 
 }
 
