@@ -33,6 +33,7 @@ const contentSubItems = [
 
 const settingsSubItems = [
   { label: "Site Identity", path: "/admin/settings", exact: true },
+  { label: "Reading", path: "/admin/settings/reading" },
   { label: "Search & Discovery", path: "/admin/settings/seo" },
   { label: "Users", path: "/admin/users" },
   { label: "AI Provider", path: "/admin/settings/ai" },
