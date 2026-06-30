@@ -29,6 +29,10 @@ export const posts = pgTable("posts", {
   // Per-post canonical URL override and OG image URL override.
   canonicalUrl: text("canonical_url"),
   ogImageUrl: text("og_image_url"),
+  // Optional section stack for section-composed pages (same shape as the
+  // homepage sections). null = render the single Markdown `content` body
+  // (default; fully backward-compatible).
+  sections: jsonb("sections"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => [
