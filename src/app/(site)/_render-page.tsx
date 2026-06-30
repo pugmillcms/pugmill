@@ -3,7 +3,7 @@ import { posts, postCategories, postTags, categories, tags } from "@/lib/db/sche
 import { eq, and, ne } from "drizzle-orm";
 import { sanitizeThemeName } from "@/lib/theme-registry";
 import { getDesignConfig } from "@/lib/design-config";
-import { getThemePageView } from "@/lib/theme-modules";
+import { getThemePageView, getThemeSections } from "@/lib/theme-modules";
 import { hooks } from "@/lib/hooks";
 import type { PostPayload } from "@/lib/hook-catalogue";
 import type { ArticleLayoutConfig } from "../../../themes/default/design";
@@ -13,6 +13,7 @@ import { getWidgetAreaAssignment } from "@/lib/actions/widgets";
 import type { WidgetContext } from "@/types/widget";
 import { getActiveSlots } from "@/lib/plugin-registry";
 import type { Config } from "@/lib/config";
+import type { HomepageSection } from "@/types/homepage-sections";
 
 type PageRow = typeof posts.$inferSelect;
 
@@ -48,6 +49,16 @@ export async function RenderedPage({
   isPreview: boolean;
 }) {
   const activeTheme = sanitizeThemeName(config.appearance.activeTheme);
+
+  // Section-composed page: render the theme's section stack (like the homepage)
+  // instead of the single-body PageView. null/empty sections fall through to
+  // the Markdown body below (the default, backward-compatible path).
+  const sectionStack = Array.isArray(page.sections) ? (page.sections as HomepageSection[]) : null;
+  if (sectionStack && sectionStack.length > 0) {
+    const ThemeSections = getThemeSections(activeTheme);
+    return <ThemeSections sections={sectionStack} page={1} />;
+  }
+
   const designConfig = await getDesignConfig(activeTheme, isPreview ? "draft" : "published");
 
   const layoutConfig: ArticleLayoutConfig = {
