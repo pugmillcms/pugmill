@@ -66,6 +66,12 @@ export const configSchema = z.object({
     navigation: z.array(navItemSchema).default([]),
     footerNavigation: z.array(navItemSchema).default([]),
   }),
+  reading: z.object({
+    /** "sections" = the active theme's homepage section stack (default). "page" = a specific published page is the front page. */
+    homepageMode: z.enum(["sections", "page"]).default("sections"),
+    /** posts.id (type="page") used as the homepage when homepageMode === "page". null = none selected. */
+    homepagePageId: z.number().int().nullable().default(null),
+  }).default({ homepageMode: "sections", homepagePageId: null }),
   modules: z.object({
     activePlugins: z.array(z.string()).default([]),
     pluginSettings: z.record(
@@ -176,6 +182,7 @@ const DEFAULT_CONFIG: Config = {
       { label: "About", path: "/about" },
     ],
   },
+  reading: { homepageMode: "sections", homepagePageId: null },
   modules: {
     activePlugins: [],
     pluginSettings: {},

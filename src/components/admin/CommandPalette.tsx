@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { label: "Themes", path: "/admin/themes", group: "Navigate" },
   { label: "Plugins", path: "/admin/plugins", group: "Navigate" },
   { label: "Settings — Site Identity", path: "/admin/settings", group: "Navigate" },
+  { label: "Settings — Reading", path: "/admin/settings/reading", group: "Navigate" },
   { label: "Settings — Navigation", path: "/admin/settings/navigation", group: "Navigate" },
   { label: "Settings — SEO", path: "/admin/settings/seo", group: "Navigate" },
   { label: "Settings — AI", path: "/admin/settings/ai", group: "Navigate" },
