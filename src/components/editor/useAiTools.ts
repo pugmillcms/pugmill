@@ -428,13 +428,30 @@ export function useAiTools({
     markApplied(key);
   }
 
-  function tryInsertInternalLink(anchorText: string, slug: string, context: string): boolean {
+  /**
+   * Insert an internal link around `anchorText` inside `context`.
+   * `path` is the server-validated URL path (/slug for pages, /post/slug for posts).
+   * Refuses when the anchor overlaps an existing Markdown link or sits on a
+   * heading or table row, so applying a suggestion can never corrupt a link.
+   */
+  function tryInsertInternalLink(anchorText: string, path: string, context: string): boolean {
+    if (!/^\/[a-z0-9][a-z0-9/-]*$/.test(path) || path.includes("//")) return false;
     const content = editorRef.current?.getContent() ?? "";
-    if (!content.includes(context)) return false;
-    const linked = `[${anchorText}](/post/${slug})`;
+    if (!anchorText.trim() || !content.includes(context)) return false;
+    const linked = `[${anchorText}](${path})`;
     if (content.includes(linked)) return false;
-    const updatedContext = context.replace(anchorText, linked);
-    if (updatedContext === context) return false;
+    const at = context.indexOf(anchorText);
+    if (at === -1) return false;
+    const end = at + anchorText.length;
+    for (const m of context.matchAll(/\[[^\]]*\]\([^)]*\)/g)) {
+      const s0 = m.index ?? 0;
+      if (at < s0 + m[0].length && end > s0) return false; // overlaps an existing link
+    }
+    if (/[\[\]]/.test(anchorText)) return false;
+    const lineStart = content.lastIndexOf("\n", content.indexOf(context) + at) + 1;
+    const line = content.slice(lineStart, content.indexOf("\n", lineStart) === -1 ? undefined : content.indexOf("\n", lineStart));
+    if (/^\s*(#{1,6}\s|\|)/.test(line)) return false; // headings and table rows
+    const updatedContext = context.slice(0, at) + linked + context.slice(end);
     editorRef.current?.setContent(content.replace(context, updatedContext));
     return true;
   }

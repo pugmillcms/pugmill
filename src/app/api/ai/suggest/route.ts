@@ -70,28 +70,30 @@ export async function POST(req: NextRequest) {
 
     // ── Internal links: fetch post index server-side, build prompt, return ──────
     if (type === "internal-links") {
-      // Fetch up to 40 published posts (title, slug, excerpt) excluding the current post
-      const conditions = [eq(posts.published, true), eq(posts.type, "post")];
+      // Fetch published posts AND pages (title, slug, type, excerpt), excluding the
+      // current one. Pages live at /<slug>, posts at /post/<slug>; the server
+      // resolves the path so a model-invented prefix can never reach the content.
+      const conditions = [eq(posts.published, true)];
       if (postId) conditions.push(ne(posts.id, postId));
 
-      const allPosts = await db
-        .select({ title: posts.title, slug: posts.slug, excerpt: posts.excerpt })
+      const allPosts = (await db
+        .select({ title: posts.title, slug: posts.slug, excerpt: posts.excerpt, type: posts.type })
         .from(posts)
         .where(and(...conditions))
-        .limit(40);
+        .limit(120)).filter(p => p.slug !== "home");
 
       if (allPosts.length === 0) {
         return NextResponse.json({ result: "[]" });
       }
 
       const postsIndex = allPosts
-        .map(p => `- "${p.title}" → /post/${p.slug}${p.excerpt ? ` | ${p.excerpt.slice(0, 120)}` : ""}`)
+        .map(p => `- slug: ${p.slug} | title: "${p.title}"${p.excerpt ? ` | ${p.excerpt.slice(0, 120)}` : ""}`)
         .join("\n");
 
       const systemPrompt = `You are an internal linking expert for a blog. Given a post's content and an index of other published posts on the same site, identify 3–5 natural internal linking opportunities.
 
 For each suggestion, identify:
-- Which existing post to link to (use its exact slug)
+- Which existing post or page to link to (use its exact slug from the index, with no slashes or path prefix)
 - The best anchor text (2–6 words from the post content that naturally describe the linked topic)
 - The context sentence where the link fits (quote the exact sentence from the content)
 
@@ -110,7 +112,20 @@ No markdown fences. No explanation outside the JSON. Only suggest posts that are
       const userPrompt = `Post title: "${postTitle ?? ""}"\n\nPost content:\n${content}\n\n---\nPublished posts index:\n${postsIndex}`;
 
       try {
-        const result = await ai.complete(systemPrompt, userPrompt);
+        const raw = await ai.complete(systemPrompt, userPrompt);
+        // Validate against the index: keep only known slugs and attach the real path.
+        const bySlug = new Map(allPosts.map(p => [p.slug, p]));
+        let result = raw;
+        try {
+          const parsed = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, "").trim()) as Array<Record<string, unknown>>;
+          const cleaned = (Array.isArray(parsed) ? parsed : []).flatMap(sug => {
+            const slug = String(sug.slug ?? "").trim().replace(/^https?:\/\/[^/]+/i, "").replace(/^\/+/, "").replace(/^post\//, "").replace(/\/+$/, "");
+            const target = bySlug.get(slug);
+            if (!target) return [];
+            return [{ ...sug, slug, title: target.title, path: target.type === "page" ? `/${slug}` : `/post/${slug}` }];
+          });
+          result = JSON.stringify(cleaned);
+        } catch { /* leave the raw text; the client shows a parse error */ }
         return NextResponse.json({ result, usage });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "AI request failed";

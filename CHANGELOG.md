@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Editor: Markdown tables are no longer destroyed by a Visual-mode save.** The Tiptap schema had no table node, so a table loaded into Visual mode was flattened into run-together text and saved that way. Visual mode now includes `@tiptap/extension-table`; simple tables (header row, one paragraph per cell) round-trip to pipe syntax through `tiptap-markdown`.
+- **AI Internal Links: correct addresses, pages included, existing links left alone.** The tool indexed posts only, showed the model a `/post/<slug>` path and then prefixed `/post/` again on insert, producing `/post/post/<slug>` (404). The suggest route now indexes published pages and posts, validates each suggestion against that index and returns a server-resolved `path` (`/<slug>` for pages, `/post/<slug>` for posts). Inserting a suggestion is refused when the anchor overlaps an existing Markdown link or sits on a heading or table row.
+
+---
+
 ## [0.1.0] — 2026-05-02 — Developer Preview
 
 First public release. Intended for developers working with AI agents in Claude Code, Cursor, Replit, or similar environments. Public APIs may shift before 1.0.

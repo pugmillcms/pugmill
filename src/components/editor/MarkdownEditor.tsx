@@ -6,6 +6,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import { Markdown } from "tiptap-markdown";
+import { TableKit } from "@tiptap/extension-table";
 import { uploadMedia } from "@/lib/actions/media";
 import type { NodeViewProps } from "@tiptap/react";
 
@@ -137,6 +138,10 @@ const MarkdownEditor = forwardRef<MarkdownEditorHandle, Props>(function Markdown
         protocols: ["http", "https", "mailto"],
         HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" },
       }),
+      // Tables: without a table node, Visual mode flattens a Markdown table into
+      // run-together text and saving destroys it. tiptap-markdown serializes
+      // simple tables (header row, one paragraph per cell) back to pipe syntax.
+      TableKit.configure({ table: { resizable: false } }),
       Markdown.configure({ transformPastedText: true, transformCopiedText: true }),
     ],
     content: defaultValue,
