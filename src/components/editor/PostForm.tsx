@@ -647,13 +647,14 @@ export default function PostForm({
     let content: React.ReactNode;
     try {
       if (action === "internal-links") {
-        const suggestions = parseJson<Array<{ slug: string; title: string; anchorText: string; context: string }>>(result);
+        const suggestions = parseJson<Array<{ slug: string; path?: string; title: string; anchorText: string; context: string }>>(result);
         content = suggestions.length === 0
           ? <p className="text-sm text-zinc-500">No strong internal linking opportunities found.</p>
           : (
             <ul className="divide-y divide-zinc-100">
               {suggestions.map((s, i) => {
-                const md = `[${s.anchorText}](/post/${s.slug})`;
+                const linkPath = s.path ?? `/post/${s.slug}`;
+                const md = `[${s.anchorText}](${linkPath})`;
                 const insertKey = `link-insert-${i}`;
                 const copyKey = `link-copy-${i}`;
                 return (
@@ -665,7 +666,7 @@ export default function PostForm({
                       <button
                         type="button"
                         onClick={() => {
-                          const ok = tryInsertInternalLink(s.anchorText, s.slug, s.context);
+                          const ok = tryInsertInternalLink(s.anchorText, linkPath, s.context);
                           if (ok) markApplied(insertKey);
                           else handleCopy(md, copyKey);
                         }}
